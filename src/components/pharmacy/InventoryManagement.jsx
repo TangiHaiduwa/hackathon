@@ -54,6 +54,7 @@ const InventoryManagement = () => {
 
   const stockOptions = [
     { value: 'all', label: 'All Stock Levels' },
+    { value: 'out-of-stock', label: 'Out of Stock' },
     { value: 'critical', label: 'Critical (<5)' },
     { value: 'low', label: 'Low Stock' },
     { value: 'adequate', label: 'Adequate' },
@@ -68,27 +69,34 @@ const InventoryManagement = () => {
     { value: '6months', label: 'Expires in 6 months' }
   ];
 
-  // New drug form
-  const [newDrug, setNewDrug] = useState({
-    drug_name: '',
-    generic_name: '',
-    category_id: '',
-    form_id: '',
-    dosage: '',
-    requires_prescription: true,
-    supplier: '',
-    description: ''
-  });
+  // New drug form with stock and pricing
+ const [newDrug, setNewDrug] = useState({
+  drug_name: '',
+  generic_name: '',
+  category_id: '',
+  form_id: '',
+  dosage: '',
+  requires_prescription: true,
+  supplier: '',
+  description: '',
+  // Change these from 0 to empty strings:
+  initial_quantity: '',
+  unit_price: '',
+  batch_number: `BATCH-${Date.now().toString().slice(-6)}`,
+  expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  reorder_level: 10
+});
 
   // Inventory form for existing drug
-  const [inventoryForm, setInventoryForm] = useState({
-    drug_id: '',
-    batch_number: '',
-    quantity: 0,
-    unit_price: 0,
-    expiry_date: '',
-    reorder_level: 10
-  });
+// Inventory form for existing drug
+const [inventoryForm, setInventoryForm] = useState({
+  drug_id: '',
+  batch_number: '',
+  quantity: '',
+  unit_price: '',
+  expiry_date: '',
+  reorder_level: 10
+});
 
   // Reorder form
   const [reorderForm, setReorderForm] = useState({
@@ -176,8 +184,9 @@ const InventoryManagement = () => {
       filtered = filtered.filter(item => {
         const ratio = item.quantity / item.reorder_level;
         switch (stockFilter) {
-          case 'critical': return item.quantity < 5;
-          case 'low': return ratio < 1;
+          case 'out-of-stock': return item.quantity === 0;
+          case 'critical': return item.quantity > 0 && item.quantity < 5;
+          case 'low': return ratio < 1 && item.quantity > 0;
           case 'adequate': return ratio >= 1 && ratio < 3;
           case 'overstock': return ratio >= 3;
           default: return true;
@@ -206,8 +215,9 @@ const InventoryManagement = () => {
 
   const calculateAnalytics = () => {
     const now = new Date();
-    const criticalStock = inventory.filter(item => item.quantity < 5).length;
-    const lowStock = inventory.filter(item => item.quantity < item.reorder_level).length;
+    const outOfStock = inventory.filter(item => item.quantity === 0).length;
+    const criticalStock = inventory.filter(item => item.quantity > 0 && item.quantity < 5).length;
+    const lowStock = inventory.filter(item => item.quantity > 0 && item.quantity < item.reorder_level).length;
     const expiredItems = inventory.filter(item => new Date(item.expiry_date) < now).length;
     const expiringSoon = inventory.filter(item => {
       const expiryDate = new Date(item.expiry_date);
@@ -222,6 +232,7 @@ const InventoryManagement = () => {
     setAnalytics({
       totalItems: inventory.length,
       totalValue,
+      outOfStock,
       criticalStock,
       lowStock,
       expiredItems,
@@ -230,7 +241,6 @@ const InventoryManagement = () => {
   };
 
   const calculatePredictiveAnalytics = async (inventoryData) => {
-    // Simulate predictive analytics based on dispensing history
     try {
       const { data: dispensingData } = await supabase
         .from('drug_dispensing')
@@ -249,16 +259,18 @@ const InventoryManagement = () => {
       });
 
       const predictive = inventoryData.map(item => {
-        const dailyUsage = (usageByDrug[item.drugs.id] || 0) / 90; // Average daily usage over 90 days
-        const daysOfSupply = dailyUsage > 0 ? Math.floor(item.quantity / dailyUsage) : 999;
-        const reorderUrgency = daysOfSupply < 10 ? 'high' : daysOfSupply < 30 ? 'medium' : 'low';
+        const dailyUsage = (usageByDrug[item.drugs.id] || 0) / 90;
+        const daysOfSupply = dailyUsage > 0 ? Math.floor(item.quantity / dailyUsage) : item.quantity > 0 ? 999 : 0;
+        const reorderUrgency = daysOfSupply === 0 ? 'out-of-stock' : 
+                             daysOfSupply < 10 ? 'high' : 
+                             daysOfSupply < 30 ? 'medium' : 'low';
 
         return {
           ...item,
           dailyUsage,
           daysOfSupply,
           reorderUrgency,
-          suggestedReorder: dailyUsage > 0 ? Math.ceil(dailyUsage * 30) : item.reorder_level // 30-day supply
+          suggestedReorder: dailyUsage > 0 ? Math.ceil(dailyUsage * 30) : item.reorder_level
         };
       });
 
@@ -269,6 +281,8 @@ const InventoryManagement = () => {
   };
 
   const getStockStatus = (item) => {
+    if (item.quantity === 0) return { status: 'out-of-stock', color: 'bg-gray-100 text-gray-800' };
+    
     const ratio = item.quantity / item.reorder_level;
     if (item.quantity < 5) return { status: 'critical', color: 'bg-red-100 text-red-800' };
     if (ratio < 1) return { status: 'low', color: 'bg-orange-100 text-orange-800' };
@@ -288,39 +302,45 @@ const InventoryManagement = () => {
   };
 
   const openAddModal = () => {
-    setNewDrug({
-      drug_name: '',
-      generic_name: '',
-      category_id: categories[0]?.id || '',
-      form_id: drugForms[0]?.id || '',
-      dosage: '',
-      requires_prescription: true,
-      supplier: '',
-      description: ''
-    });
-    setShowAddModal(true);
-  };
+  setNewDrug({
+    drug_name: '',
+    generic_name: '',
+    category_id: categories[0]?.id || '',
+    form_id: drugForms[0]?.id || '',
+    dosage: '',
+    requires_prescription: true,
+    supplier: '',
+    description: '',
+    // Change these to empty strings:
+    initial_quantity: '',
+    unit_price: '',
+    batch_number: `BATCH-${Date.now().toString().slice(-6)}`,
+    expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    reorder_level: 10
+  });
+  setShowAddModal(true);
+};
 
-  const openEditModal = (item) => {
-    setSelectedItem(item);
-    setInventoryForm({
-      drug_id: item.drugs.id,
-      batch_number: item.batch_number,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      expiry_date: item.expiry_date.split('T')[0],
-      reorder_level: item.reorder_level
-    });
-    setShowEditModal(true);
-  };
+const openEditModal = (item) => {
+  setSelectedItem(item);
+  setInventoryForm({
+    drug_id: item.drugs.id,
+    batch_number: item.batch_number,
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+    expiry_date: item.expiry_date.split('T')[0],
+    reorder_level: item.reorder_level
+  });
+  setShowEditModal(true);
+};
 
   const openReorderModal = (item) => {
     setSelectedItem(item);
     setReorderForm({
-      quantity: Math.max(item.reorder_level * 2, 100), // Smart default
+      quantity: Math.max(item.reorder_level * 2, 100),
       supplier: item.drugs.supplier || '',
       expected_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      notes: `Reorder for ${item.drugs.drug_name}`
+      notes: `Reorder for ${item.drugs.drug_name} - Batch: ${item.batch_number}`
     });
     setShowReorderModal(true);
   };
@@ -329,25 +349,39 @@ const InventoryManagement = () => {
     try {
       setProcessing(true);
       
+      // Validate required fields
+      if (!newDrug.drug_name || newDrug.initial_quantity < 0 || newDrug.unit_price < 0) {
+        throw new Error('Please fill all required fields with valid values');
+      }
+
       // First, add the drug definition
       const { data: drug, error: drugError } = await supabase
         .from('drugs')
-        .insert([newDrug])
+        .insert([{
+          drug_name: newDrug.drug_name,
+          generic_name: newDrug.generic_name,
+          category_id: newDrug.category_id,
+          form_id: newDrug.form_id,
+          dosage: newDrug.dosage,
+          requires_prescription: newDrug.requires_prescription,
+          supplier: newDrug.supplier,
+          description: newDrug.description
+        }])
         .select()
         .single();
 
       if (drugError) throw drugError;
 
-      // Then add initial inventory
+      // Then add inventory with actual quantity and pricing
       const { error: inventoryError } = await supabase
         .from('drug_inventory')
         .insert([{
           drug_id: drug.id,
-          batch_number: `BATCH-${Date.now()}`,
-          quantity: 0,
-          unit_price: 0,
-          expiry_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
-          reorder_level: 10
+          batch_number: newDrug.batch_number,
+          quantity: newDrug.initial_quantity,
+          unit_price: newDrug.unit_price,
+          expiry_date: newDrug.expiry_date,
+          reorder_level: newDrug.reorder_level
         }]);
 
       if (inventoryError) throw inventoryError;
@@ -361,12 +395,12 @@ const InventoryManagement = () => {
           table_name: 'drugs',
           record_id: drug.id,
           new_values: newDrug,
-          notes: `New drug ${newDrug.drug_name} added to inventory`
+          notes: `New drug ${newDrug.drug_name} added with ${newDrug.initial_quantity} units at N$${newDrug.unit_price.toFixed(2)} per unit`
         });
 
       setShowAddModal(false);
       fetchInventoryData();
-      alert('Drug added successfully!');
+      alert(`Drug added successfully! ${newDrug.initial_quantity} units added to inventory at N$${newDrug.unit_price.toFixed(2)} each.`);
     } catch (error) {
       console.error('Error adding drug:', error);
       alert('Error adding drug: ' + error.message);
@@ -396,7 +430,7 @@ const InventoryManagement = () => {
           record_id: selectedItem.id,
           old_values: selectedItem,
           new_values: inventoryForm,
-          notes: `Inventory updated for ${selectedItem.drugs.drug_name}`
+          notes: `Inventory updated for ${selectedItem.drugs.drug_name} - Quantity: ${inventoryForm.quantity}, Price: N$${inventoryForm.unit_price.toFixed(2)}`
         });
 
       setShowEditModal(false);
@@ -414,8 +448,11 @@ const InventoryManagement = () => {
     try {
       setProcessing(true);
       
-      // In a real system, this would integrate with a supplier API
-      // For now, we'll simulate the reorder and update inventory
+      if (reorderForm.quantity <= 0) {
+        throw new Error('Please enter a valid quantity to order');
+      }
+
+      // Update inventory with new stock
       const { error } = await supabase
         .from('drug_inventory')
         .update({
@@ -435,12 +472,12 @@ const InventoryManagement = () => {
           table_name: 'drug_inventory',
           record_id: selectedItem.id,
           new_values: reorderForm,
-          notes: `Reorder placed for ${selectedItem.drugs.drug_name}`
+          notes: `Reorder placed for ${selectedItem.drugs.drug_name} - ${reorderForm.quantity} units at N$${selectedItem.unit_price.toFixed(2)} each from ${reorderForm.supplier}`
         });
 
       setShowReorderModal(false);
       fetchInventoryData();
-      alert(`Reorder placed successfully! ${reorderForm.quantity} units added to inventory.`);
+      alert(`Reorder placed successfully! ${reorderForm.quantity} units added to inventory. Total stock: ${selectedItem.quantity + reorderForm.quantity} units.`);
     } catch (error) {
       console.error('Error placing reorder:', error);
       alert('Error placing reorder: ' + error.message);
@@ -449,21 +486,73 @@ const InventoryManagement = () => {
     }
   };
 
+  // Function to deduct stock when dispensing (for integration with dispensing system)
+  const deductStock = async (drugId, quantityToDispense) => {
+    try {
+      // Get current inventory
+      const { data: inventory, error } = await supabase
+        .from('drug_inventory')
+        .select('*')
+        .eq('drug_id', drugId)
+        .single();
+
+      if (error) throw error;
+
+      // Check if enough stock
+      if (inventory.quantity < quantityToDispense) {
+        throw new Error(`Insufficient stock. Available: ${inventory.quantity}, Required: ${quantityToDispense}`);
+      }
+
+      // Update inventory
+      const { error: updateError } = await supabase
+        .from('drug_inventory')
+        .update({ 
+          quantity: inventory.quantity - quantityToDispense,
+          updated_at: new Date().toISOString()
+        })
+        .eq('drug_id', drugId);
+
+      if (updateError) throw updateError;
+
+      // Log the deduction
+      await supabase.from('activity_log').insert({
+        user_id: user.id,
+        activity_type_id: (await supabase.from('activity_types').select('id').eq('activity_code', 'stock_dispensed').single()).data?.id,
+        table_name: 'drug_inventory',
+        record_id: inventory.id,
+        old_values: { quantity: inventory.quantity },
+        new_values: { quantity: inventory.quantity - quantityToDispense },
+        notes: `Dispensed ${quantityToDispense} units of ${inventory.drugs.drug_name} - Total cost: N$${(quantityToDispense * inventory.unit_price).toFixed(2)}`
+      });
+
+      return { 
+        success: true, 
+        unitPrice: inventory.unit_price,
+        totalCost: quantityToDispense * inventory.unit_price 
+      };
+    } catch (error) {
+      console.error('Error deducting stock:', error);
+      throw error;
+    }
+  };
+
   const exportInventory = () => {
-    const headers = ['Drug Name', 'Generic Name', 'Batch', 'Quantity', 'Reorder Level', 'Unit Price', 'Expiry Date', 'Stock Status', 'Days Until Expiry'];
+    const headers = ['Drug Name', 'Generic Name', 'Batch', 'Quantity', 'Unit Price', 'Reorder Level', 'Expiry Date', 'Stock Status', 'Total Value', 'Days Until Expiry'];
     const csvData = filteredInventory.map(item => {
       const expiryStatus = getExpiryStatus(item.expiry_date);
       const daysUntilExpiry = Math.ceil((new Date(item.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
+      const totalValue = item.quantity * item.unit_price;
       
       return [
         item.drugs.drug_name,
         item.drugs.generic_name,
         item.batch_number,
         item.quantity,
-        item.reorder_level,
         `N$${item.unit_price.toFixed(2)}`,
+        item.reorder_level,
         new Date(item.expiry_date).toLocaleDateString(),
         getStockStatus(item).status,
+        `N$${totalValue.toFixed(2)}`,
         daysUntilExpiry
       ];
     });
@@ -520,7 +609,7 @@ const InventoryManagement = () => {
       </div>
 
       {/* Analytics Dashboard */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-6 mb-8">
         <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-4">
           <div className="flex items-center">
             <TruckIcon className="h-8 w-8 text-blue-600" />
@@ -537,6 +626,16 @@ const InventoryManagement = () => {
             <div className="ml-3">
               <p className="text-sm font-medium text-green-600">Total Value</p>
               <p className="text-2xl font-bold text-green-900">N${analytics.totalValue?.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <XCircleIcon className="h-8 w-8 text-gray-600" />
+            <div className="ml-3">
+              <p className="text-sm font-medium text-gray-600">Out of Stock</p>
+              <p className="text-2xl font-bold text-gray-900">{analytics.outOfStock}</p>
             </div>
           </div>
         </div>
@@ -690,6 +789,7 @@ const InventoryManagement = () => {
                   const expiryStatus = getExpiryStatus(item.expiry_date);
                   const predictive = predictiveData.find(p => p.id === item.id);
                   const daysUntilExpiry = Math.ceil((new Date(item.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
+                  const totalValue = item.quantity * item.unit_price;
                   
                   return (
                     <tr key={item.id} className="hover:bg-gray-50 transition duration-150">
@@ -723,8 +823,9 @@ const InventoryManagement = () => {
                           N${item.unit_price.toFixed(2)}
                         </div>
                         <div className="text-sm text-gray-500">
-                          Total: N${(item.quantity * item.unit_price).toFixed(2)}
+                          Total: N${totalValue.toFixed(2)}
                         </div>
+                        <div className="text-xs text-gray-400">per unit</div>
                       </td>
 
                       {/* Expiry & Status */}
@@ -748,6 +849,7 @@ const InventoryManagement = () => {
                               Usage: {predictive.dailyUsage?.toFixed(1)}/day
                             </div>
                             <div className={`text-xs font-medium ${
+                              predictive.reorderUrgency === 'out-of-stock' ? 'text-red-600' :
                               predictive.reorderUrgency === 'high' ? 'text-red-600' :
                               predictive.reorderUrgency === 'medium' ? 'text-orange-600' : 'text-green-600'
                             }`}>
@@ -769,7 +871,7 @@ const InventoryManagement = () => {
                           >
                             <PencilIcon className="h-4 w-4" />
                           </button>
-                          {stockStatus.status === 'critical' || stockStatus.status === 'low' ? (
+                          {stockStatus.status === 'out-of-stock' || stockStatus.status === 'critical' || stockStatus.status === 'low' ? (
                             <button
                               onClick={() => openReorderModal(item)}
                               className="text-green-600 hover:text-green-900"
@@ -802,7 +904,7 @@ const InventoryManagement = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <h3 className="text-2xl font-bold text-gray-900 mb-6">Add New Drug</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-6">Add New Drug with Stock</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
@@ -813,6 +915,7 @@ const InventoryManagement = () => {
                     onChange={(e) => setNewDrug({...newDrug, drug_name: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter brand name"
+                    required
                   />
                 </div>
                 
@@ -833,7 +936,9 @@ const InventoryManagement = () => {
                     value={newDrug.category_id}
                     onChange={(e) => setNewDrug({...newDrug, category_id: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
                   >
+                    <option value="">Select Category</option>
                     {categories.map(cat => (
                       <option key={cat.id} value={cat.id}>{cat.category_name}</option>
                     ))}
@@ -846,7 +951,9 @@ const InventoryManagement = () => {
                     value={newDrug.form_id}
                     onChange={(e) => setNewDrug({...newDrug, form_id: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
                   >
+                    <option value="">Select Form</option>
                     {drugForms.map(form => (
                       <option key={form.id} value={form.id}>{form.form_name}</option>
                     ))}
@@ -872,6 +979,62 @@ const InventoryManagement = () => {
                     onChange={(e) => setNewDrug({...newDrug, supplier: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="Supplier name"
+                  />
+                </div>
+
+                    {/* Stock and Pricing Fields */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">Initial Quantity *</label>
+  <input
+    type="number"
+    value={newDrug.initial_quantity}
+    onChange={(e) => setNewDrug({...newDrug, initial_quantity: e.target.value === '' ? '' : parseInt(e.target.value) || 0})}
+    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+    min="0"
+    required
+  />
+</div>
+
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">Unit Price (N$) *</label>
+  <input
+    type="number"
+    step="0.01"
+    value={newDrug.unit_price}
+    onChange={(e) => setNewDrug({...newDrug, unit_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
+    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+    min="0"
+    required
+  />
+</div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Batch Number</label>
+                  <input
+                    type="text"
+                    value={newDrug.batch_number}
+                    onChange={(e) => setNewDrug({...newDrug, batch_number: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
+                  <input
+                    type="date"
+                    value={newDrug.expiry_date}
+                    onChange={(e) => setNewDrug({...newDrug, expiry_date: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Reorder Level</label>
+                  <input
+                    type="number"
+                    value={newDrug.reorder_level}
+                    onChange={(e) => setNewDrug({...newDrug, reorder_level: parseInt(e.target.value) || 10})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    min="1"
                   />
                 </div>
 
@@ -906,10 +1069,10 @@ const InventoryManagement = () => {
                 </button>
                 <button
                   onClick={addNewDrug}
-                  disabled={processing || !newDrug.drug_name}
+                  disabled={processing || !newDrug.drug_name || !newDrug.category_id || !newDrug.form_id || newDrug.initial_quantity === '' || newDrug.unit_price === '' || newDrug.initial_quantity < 0 || newDrug.unit_price < 0}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {processing ? 'Adding...' : 'Add Drug'}
+                  {processing ? 'Adding...' : 'Add Drug with Stock'}
                 </button>
               </div>
             </div>
@@ -917,77 +1080,80 @@ const InventoryManagement = () => {
         </div>
       )}
 
-      {/* Edit Inventory Modal */}
-      {showEditModal && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">
-                Edit Inventory: {selectedItem.drugs.drug_name}
-              </h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                  <input
-                    type="number"
-                    value={inventoryForm.quantity}
-                    onChange={(e) => setInventoryForm({...inventoryForm, quantity: parseInt(e.target.value) || 0})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Unit Price (N$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={inventoryForm.unit_price}
-                    onChange={(e) => setInventoryForm({...inventoryForm, unit_price: parseFloat(e.target.value) || 0})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Reorder Level</label>
-                  <input
-                    type="number"
-                    value={inventoryForm.reorder_level}
-                    onChange={(e) => setInventoryForm({...inventoryForm, reorder_level: parseInt(e.target.value) || 0})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
-                  <input
-                    type="date"
-                    value={inventoryForm.expiry_date}
-                    onChange={(e) => setInventoryForm({...inventoryForm, expiry_date: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4 border-t mt-4">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={updateInventory}
-                  disabled={processing}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {processing ? 'Updating...' : 'Update Inventory'}
-                </button>
-              </div>
-            </div>
+              {/* Edit Inventory Modal */}
+{showEditModal && selectedItem && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg max-w-md w-full">
+      <div className="p-6">
+        <h3 className="text-xl font-bold text-gray-900 mb-4">
+          Edit Inventory: {selectedItem.drugs.drug_name}
+        </h3>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+            <input
+              type="number"
+              value={inventoryForm.quantity}
+              onChange={(e) => setInventoryForm({...inventoryForm, quantity: e.target.value === '' ? '' : parseInt(e.target.value) || 0})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              min="0"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Unit Price (N$)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={inventoryForm.unit_price}
+              onChange={(e) => setInventoryForm({...inventoryForm, unit_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              min="0"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Reorder Level</label>
+            <input
+              type="number"
+              value={inventoryForm.reorder_level}
+              onChange={(e) => setInventoryForm({...inventoryForm, reorder_level: e.target.value === '' ? '' : parseInt(e.target.value) || 0})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              min="1"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
+            <input
+              type="date"
+              value={inventoryForm.expiry_date}
+              onChange={(e) => setInventoryForm({...inventoryForm, expiry_date: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
-      )}
+
+        <div className="flex justify-end space-x-3 pt-4 border-t mt-4">
+          <button
+            onClick={() => setShowEditModal(false)}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={updateInventory}
+            disabled={processing}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {processing ? 'Updating...' : 'Update Inventory'}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Reorder Modal */}
       {showReorderModal && selectedItem && (
@@ -997,26 +1163,33 @@ const InventoryManagement = () => {
               <h3 className="text-xl font-bold text-gray-900 mb-4">
                 Reorder: {selectedItem.drugs.drug_name}
               </h3>
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">Current Price: <strong>N${selectedItem.unit_price.toFixed(2)}</strong> per unit</p>
+                <p className="text-sm text-gray-600">Current Stock: <strong>{selectedItem.quantity} units</strong></p>
+              </div>
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Quantity to Order</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Quantity to Order *</label>
                   <input
                     type="number"
                     value={reorderForm.quantity}
                     onChange={(e) => setReorderForm({...reorderForm, quantity: parseInt(e.target.value) || 0})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    min="1"
+                    required
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Supplier</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Supplier *</label>
                   <input
                     type="text"
                     value={reorderForm.supplier}
                     onChange={(e) => setReorderForm({...reorderForm, supplier: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="Supplier name"
+                    required
                   />
                 </div>
                 
@@ -1050,7 +1223,7 @@ const InventoryManagement = () => {
                 </button>
                 <button
                   onClick={placeReorder}
-                  disabled={processing}
+                  disabled={processing || reorderForm.quantity <= 0 || !reorderForm.supplier}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
                 >
                   {processing ? 'Ordering...' : 'Place Order'}
