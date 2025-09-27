@@ -9,6 +9,13 @@ import {
   ClipboardDocumentListIcon,
   BeakerIcon,
   ExclamationTriangleIcon,
+  HomeIcon,
+  CalendarIcon,
+  TruckIcon,
+  ChartBarIcon,
+  DocumentTextIcon,
+  MagnifyingGlassIcon,
+  AcademicCapIcon,
   CheckCircleIcon,
   XCircleIcon,
   InformationCircleIcon,
@@ -56,7 +63,11 @@ const DoctorDecisionSupport = () => {
     },
     { name: "Reporting", href: "/doctor-reporting", icon: ChartBarIcon },
     { name: "Search", href: "/doctor-search", icon: MagnifyingGlassIcon },
-    // { name: 'Decision Support', href: '/doctor-decision-support', icon: LightBulbIcon },
+    {
+      name: "Decision Support",
+      href: "/doctor-decision-support",
+      icon: LightBulbIcon,
+    },
     // { name: 'Resources', href: '/doctor-resources', icon: AcademicCapIcon },
   ];
 

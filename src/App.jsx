@@ -39,6 +39,7 @@ import DoctorDrugAdmin from "./pages/DoctorDrugAdmin";
 import DoctorReporting from "./pages/DoctorReporting";
 import DoctorSearch from "./pages/DoctorSearch";
 import DecisionSupport from "./pages/DecisionSupport";
+import DoctorDiagnosis from "./pages/DoctorDiagnosis";
 
 //Nurse Routes
 import Vitals from "./components/nurse/Vitals";
@@ -59,7 +60,6 @@ import SymptomChecker from './components/diagnosis/SymptomChecker';
 
 
 // Feature Modules
-import DoctorDiagnosis from "./pages/DoctorDiagnosis";
 import Appointment from "./pages/Appointment";
 import Pharmacy from "./pages/Pharmacy";
 import MedicalRecords from "./pages/MedicalRecords";
@@ -121,6 +121,7 @@ function App() {
             <Route path="/doctor-drug-admin" element={<DoctorDrugAdmin />} />
             <Route path="/doctor-reporting" element={<DoctorReporting />} />
             <Route path="/doctor-search" element={<DoctorSearch />} />
+            <Route path="/decision-support" element={<DoctorDiagnosis />} />
             {/* Nurse Modules */}
             <Route path="/nurse-medication" element={<Medication />} />
             <Route path="/nurse-patientcare" element={<PatientCare />} />
