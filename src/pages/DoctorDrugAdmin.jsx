@@ -84,7 +84,11 @@ const DoctorDrugAdmin = () => {
     },
     { name: "Reporting", href: "/doctor-reporting", icon: ChartBarIcon },
     { name: "Search", href: "/doctor-search", icon: MagnifyingGlassIcon },
-    // { name: 'Decision Support', href: '/doctor-decision-support', icon: LightBulbIcon },
+    {
+      name: "Decision Support",
+      href: "/doctor-decision-support",
+      icon: LightBulbIcon,
+    },
     // { name: 'Resources', href: '/doctor-resources', icon: AcademicCapIcon },
   ];
 

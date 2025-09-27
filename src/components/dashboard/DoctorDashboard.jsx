@@ -66,6 +66,12 @@ const DoctorDashboard = () => {
     },
     { name: "Reporting", href: "/doctor-reporting", icon: ChartBarIcon },
     { name: "Search", href: "/doctor-search", icon: MagnifyingGlassIcon },
+    {
+      name: "Decision Support",
+      href: "/doctor-decision-support",
+      icon: LightBulbIcon,
+    },
+    // { name: 'Resources', href: '/doctor-resources', icon: AcademicCapIcon },
   ];
 
   // Status configurations with better styling and shorter labels
