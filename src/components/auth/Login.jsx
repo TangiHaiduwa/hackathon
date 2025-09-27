@@ -5,7 +5,10 @@ import {
   EyeSlashIcon, 
   ShieldCheckIcon,
   EnvelopeIcon,
-  LockClosedIcon
+  LockClosedIcon,
+  BuildingLibraryIcon,
+  UserIcon,
+  KeyIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -143,279 +146,195 @@ const Login = () => {
     }
   };
 
-  // Demo login function (for testing without real accounts)
-  const handleDemoLogin = async (demoEmail, demoPassword, role) => {
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      // Try demo credentials first
-      if (demoPassword === 'demo123') {
-        console.log('Using demo account:', demoEmail);
-        
-        // For demo purposes, we'll simulate a successful login
-        const demoUser = {
-          id: `demo-${role}-id`,
-          email: demoEmail,
-          user_metadata: { full_name: `Demo ${role.charAt(0).toUpperCase() + role.slice(1)}` }
-        };
-        
-        // Store demo user in localStorage for session management
-        localStorage.setItem('demoUser', JSON.stringify({
-          ...demoUser,
-          role: role
-        }));
-        
-        const dashboardPath = getRoleDashboard(role);
-        navigate(dashboardPath, { 
-          state: { 
-            message: `Demo mode: Welcome ${demoUser.user_metadata.full_name}!`,
-            type: 'info',
-            isDemo: true
-          }
-        });
-        return;
-      }
-      
-      // If not demo password, try real authentication
-      const result = await signIn(demoEmail, demoPassword);
-      
-      if (result.success) {
-        // Real authentication successful
-        const { data: userData } = await supabase
-          .from('users')
-          .select(`
-            id,
-            email,
-            first_name,
-            last_name,
-            roles (role_name)
-          `)
-          .eq('id', result.data.user.id)
-          .single();
-
-        const userRole = userData?.roles?.role_name || 'patient';
-        const dashboardPath = getRoleDashboard(userRole);
-        
-        navigate(dashboardPath, { 
-          state: { 
-            message: `Welcome back, ${userData?.first_name || userData?.last_name || 'User'}!`,
-            type: 'success'
-          }
-        });
-      } else {
-        setError('Invalid credentials for demo account.');
-      }
-      
-    } catch (error) {
-      console.error('Demo login error:', error);
-      setError('Demo login failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Add debug function to check database structure
-  const debugDatabaseStructure = async () => {
-    try {
-      console.log('=== DEBUG: Checking database structure ===');
-      
-      // Check users table structure
-      const { data: usersSample, error: usersError } = await supabase
-        .from('users')
-        .select('*')
-        .limit(1);
-      
-      console.log('Users table sample:', usersSample);
-      console.log('Users table error:', usersError);
-      
-      // Check roles table structure
-      const { data: roles, error: rolesError } = await supabase
-        .from('roles')
-        .select('*');
-      
-      console.log('Roles table:', roles);
-      console.log('Roles table error:', rolesError);
-      
-    } catch (error) {
-      console.error('Debug error:', error);
-    }
-  };
-
-  // Uncomment the line below to debug database structure when component mounts
-  // useEffect(() => { debugDatabaseStructure(); }, []);
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        {/* Header */}
-        <div className="text-center">
-          <div className="flex items-center justify-center space-x-3 mb-6">
-            <div className="bg-blue-600 p-3 rounded-xl">
-              <ShieldCheckIcon className="h-8 w-8 text-white" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-lg w-full space-y-8">
+        {/* Header Card */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+          <div className="flex items-center justify-center space-x-4 mb-6">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-800 p-4 rounded-2xl shadow-lg">
+              <BuildingLibraryIcon className="h-10 w-10 text-white" />
             </div>
-            <div>
-              <span className="text-3xl font-bold text-gray-900">MESMTF</span>
-              <span className="text-3xl font-light text-blue-600">Pro</span>
+            <div className="text-left">
+              <div className="flex items-baseline">
+                <span className="text-3xl font-bold text-gray-900">MESMTF</span>
+                <span className="text-xl font-light text-blue-600 ml-1">Pro</span>
+              </div>
+              <p className="text-sm text-gray-600">Ministry of Health & Social Services</p>
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Sign in to access your medical account
+          
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Secure Login Portal</h2>
+          <p className="text-gray-600 text-sm">
+            Access your healthcare account with secure authentication
           </p>
         </div>
 
-        {/* Login Form */}
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
+        {/* Login Form Card */}
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="flex items-center justify-center mb-6">
+            <div className="bg-blue-100 p-3 rounded-full">
+              <UserIcon className="h-6 w-6 text-blue-600" />
             </div>
-          )}
-
-          {/* Email Input */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email Address
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <EnvelopeIcon className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={formData.email}
-                onChange={handleChange}
-                className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
-                placeholder="Enter your email address"
-                disabled={isLoading}
-              />
-            </div>
+            <h3 className="text-lg font-semibold text-gray-900 ml-3">Account Sign In</h3>
           </div>
 
-          {/* Password Input */}
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <LockClosedIcon className="h-5 w-5 text-gray-400" />
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
               </div>
-              <input
-                id="password"
-                name="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                required
-                value={formData.password}
-                onChange={handleChange}
-                className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
-                placeholder="Enter your password"
-                disabled={isLoading}
-              />
-              <button
-                type="button"
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                onClick={() => setShowPassword(!showPassword)}
-                disabled={isLoading}
+            )}
+
+            {/* Email Input */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                <EnvelopeIcon className="h-4 w-4 inline-block mr-1" />
+                Email Address
+              </label>
+              <div className="relative">
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50"
+                  placeholder="Enter your official email address"
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
+            {/* Password Input */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                <KeyIcon className="h-4 w-4 inline-block mr-1" />
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="block w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 bg-gray-50"
+                  placeholder="Enter your secure password"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeSlashIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 transition duration-200" />
+                  ) : (
+                    <EyeIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 transition duration-200" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Remember Me & Forgot Password */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <input
+                  id="remember-me"
+                  name="remember-me"
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isLoading}
+                />
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                  Keep me signed in
+                </label>
+              </div>
+
+              <Link 
+                to="/forgot-password" 
+                className="text-sm font-medium text-blue-600 hover:text-blue-500 transition duration-200"
               >
-                {showPassword ? (
-                  <EyeSlashIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                Forgot password?
+              </Link>
+            </div>
+
+            {/* Submit Button */}
+            <div>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`group relative w-full flex justify-center items-center py-3 px-4 border border-transparent text-base font-medium rounded-lg text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 shadow-lg hover:shadow-xl ${
+                  isLoading ? 'opacity-50 cursor-not-allowed' : 'transform hover:-translate-y-0.5'
+                }`}
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Authenticating...
+                  </>
                 ) : (
-                  <EyeIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                )
-                }
+                  <>
+                    <ShieldCheckIcon className="h-5 w-5 mr-2" />
+                    Sign In to Portal
+                  </>
+                )}
               </button>
             </div>
-          </div>
 
-          {/* Remember Me & Forgot Password */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                disabled={isLoading}
-              />
-              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                Remember me
-              </label>
-            </div>
-
-            <div className="text-sm">
-              <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
-                Forgot your password?
-              </a>
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 shadow-lg hover:shadow-xl ${
-                isLoading ? 'opacity-50 cursor-not-allowed' : 'transform hover:-translate-y-0.5'
-              }`}
-            >
-              {isLoading ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Signing in...
-                </div>
-              ) : (
-                'Sign in to your account'
-              )}
-            </button>
-          </div>
-
-          {/* Registration Link */}
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
-                Register as a patient
-              </Link>
-            </p>
-          </div>
-
-          {/* Demo Accounts Section */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
-            <h4 className="text-sm font-medium text-gray-700 mb-3 text-center">Demo Accounts (For Testing)</h4>
-            <div className="grid grid-cols-1 gap-2 text-xs">
-              {[
-                { role: 'patient', email: 'patient@demo.com' },
-                { role: 'doctor', email: 'doctor@demo.com' },
-                { role: 'nurse', email: 'nurse@demo.com' },
-                { role: 'pharmacist', email: 'pharmacist@demo.com' },
-                { role: 'receptionist', email: 'reception@demo.com' },
-                { role: 'admin', email: 'admin@demo.com' }
-              ].map((account) => (
-                <button
-                  key={account.role}
-                  type="button"
-                  onClick={() => handleDemoLogin(account.email, 'demo123', account.role)}
-                  disabled={isLoading}
-                  className="flex justify-between items-center p-2 bg-white rounded hover:bg-gray-100 transition duration-200 disabled:opacity-50"
+            {/* Registration Link */}
+            <div className="text-center pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                New to MESMTF?{' '}
+                <Link 
+                  to="/register" 
+                  className="font-medium text-blue-600 hover:text-blue-500 transition duration-200"
                 >
-                  <span className="font-medium capitalize">{account.role}:</span>
-                  <span>{account.email} / demo123</span>
-                </button>
-              ))}
+                  Create patient account
+                </Link>
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              Click any demo account to login instantly
-            </p>
+          </form>
+        </div>
+
+        {/* Security Notice */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+          <div className="flex items-center justify-center mb-2">
+            <ShieldCheckIcon className="h-5 w-5 text-blue-600 mr-2" />
+            <span className="text-sm font-medium text-blue-800">Secure Authentication</span>
           </div>
-        </form>
+          <p className="text-xs text-blue-600">
+            Your medical data is protected with government-grade security protocols
+          </p>
+        </div>
+
+        {/* Role Information */}
+        <div className="bg-gray-50 rounded-xl p-6 text-center">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Available Portal Access</h4>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+            {['Patients', 'Doctors', 'Nurses', 'Pharmacists', 'Reception', 'Admin'].map((role) => (
+              <div key={role} className="bg-white px-3 py-2 rounded-lg border border-gray-200">
+                <span className="font-medium text-gray-700">{role}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

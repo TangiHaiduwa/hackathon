@@ -5,7 +5,13 @@ import {
   EyeSlashIcon, 
   ShieldCheckIcon,
   ExclamationTriangleIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  UserCircleIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  MapPinIcon,
+  CalendarIcon,
+  LockClosedIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -36,31 +42,27 @@ const Register = () => {
       try {
         console.log('Testing Supabase connection...');
         
-        // Test 1: Check if environment variables are set
         if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
           setSupabaseStatus('error');
-          setError('Supabase configuration missing. Please check environment variables.');
+          setError('System configuration issue. Please contact support.');
           return;
         }
 
-        // Test 2: Test basic Supabase query
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('roles')
           .select('count')
           .limit(1);
 
         if (error) {
-          console.error('Supabase connection test failed:', error);
+          console.error('Database connection test failed:', error);
           setSupabaseStatus('error');
-          setError(`Database connection error: ${error.message}`);
         } else {
-          console.log('Supabase connection successful!');
+          console.log('Database connection successful!');
           setSupabaseStatus('connected');
         }
       } catch (err) {
-        console.error('Supabase connection test failed:', err);
+        console.error('Connection test failed:', err);
         setSupabaseStatus('error');
-        setError(`Connection failed: ${err.message}`);
       }
     };
 
@@ -77,20 +79,19 @@ const Register = () => {
 
   const validateStep1 = () => {
     if (!formData.firstName.trim()) {
-    setError('First name is required');
-    return false;
-  }
-    if (!formData.lastName.trim()) {
-    setError('Last name is required');
-    return false;
+      setError('First name is required');
+      return false;
     }
-
+    if (!formData.lastName.trim()) {
+      setError('Last name is required');
+      return false;
+    }
     if (formData.firstName.trim().length < 2) {
-      setError('First Name must be at least 2 characters long');
+      setError('First name must be at least 2 characters long');
       return false;
     }
     if (formData.lastName.trim().length < 2) {
-      setError('Last Name must be at least 2 characters long');
+      setError('Last name must be at least 2 characters long');
       return false;
     }
     if (!formData.dateOfBirth) {
@@ -98,7 +99,6 @@ const Register = () => {
       return false;
     }
     
-    // Validate age (at least 1 year old)
     const birthDate = new Date(formData.dateOfBirth);
     const today = new Date();
     const age = today.getFullYear() - birthDate.getFullYear();
@@ -164,7 +164,7 @@ const Register = () => {
     setError('');
     
     if (supabaseStatus !== 'connected') {
-      setError('Database connection unavailable. Please try again later.');
+      setError('System temporarily unavailable. Please try again later.');
       return;
     }
 
@@ -173,17 +173,9 @@ const Register = () => {
     setIsLoading(true);
 
     try {
-      console.log('Starting registration with data:', {
-        ...formData,
-        password: '***' // Don't log actual password
-      });
-
       const result = await signUp(formData);
       
-      console.log('Registration result:', result);
-
       if (result.success) {
-        // Registration successful
         navigate('/dashboard', { 
           state: { 
             message: 'Registration successful! Please check your email for verification.',
@@ -191,7 +183,6 @@ const Register = () => {
           }
         });
       } else {
-        // Handle specific error cases
         if (result.error.includes('User already registered')) {
           setError('This email address is already registered. Please try logging in.');
         } else if (result.error.includes('invalid_email')) {
@@ -228,10 +219,10 @@ const Register = () => {
   const renderConnectionStatus = () => {
     if (supabaseStatus === 'checking') {
       return (
-        <div className="mx-8 mt-6 bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <div className="mx-8 mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-            <span className="text-blue-700 text-sm">Checking database connection...</span>
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
+            <span className="text-blue-700 text-sm font-medium">Verifying system connection...</span>
           </div>
         </div>
       );
@@ -239,23 +230,12 @@ const Register = () => {
 
     if (supabaseStatus === 'error') {
       return (
-        <div className="mx-8 mt-6 bg-red-50 border border-red-200 rounded-lg p-3">
+        <div className="mx-8 mt-6 bg-red-50 border border-red-200 rounded-xl p-4">
           <div className="flex items-center">
-            <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mr-2" />
-            <span className="text-red-700 text-sm">
-              Database connection issue: {error}. Please refresh the page or contact support.
+            <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mr-3" />
+            <span className="text-red-700 text-sm font-medium">
+              System temporarily unavailable. Please try again later.
             </span>
-          </div>
-        </div>
-      );
-    }
-
-    if (supabaseStatus === 'connected') {
-      return (
-        <div className="mx-8 mt-6 bg-green-50 border border-green-200 rounded-lg p-3">
-          <div className="flex items-center">
-            <CheckCircleIcon className="h-5 w-5 text-green-600 mr-2" />
-            <span className="text-green-700 text-sm">Database connection established</span>
           </div>
         </div>
       );
@@ -267,27 +247,30 @@ const Register = () => {
   // Don't render form if connection check failed
   if (supabaseStatus === 'error') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-red-600 text-white p-8 text-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
+          <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-8 text-center">
             <ExclamationTriangleIcon className="h-16 w-16 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold">Connection Error</h2>
+            <h2 className="text-2xl font-bold">System Unavailable</h2>
           </div>
           <div className="p-8 text-center">
             <p className="text-gray-700 mb-6">
-              Unable to connect to the database. This might be due to:
+              We're experiencing technical difficulties. Please try again in a few moments.
             </p>
-            <ul className="text-left text-gray-600 mb-6 space-y-2">
-              <li>• Incorrect Supabase configuration</li>
-              <li>• Network connectivity issues</li>
-              <li>• Database service temporarily unavailable</li>
-            </ul>
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
-            >
-              Retry Connection
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
+              >
+                Retry Connection
+              </button>
+              <Link 
+                to="/"
+                className="block w-full border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50 transition duration-200 font-medium"
+              >
+                Return Home
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -295,21 +278,36 @@ const Register = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white p-8 text-center">
-          <div className="flex items-center justify-center space-x-3 mb-4">
-            <ShieldCheckIcon className="h-10 w-10 text-white" />
-            <div>
-              <span className="text-4xl font-bold">MESMTF</span>
-              <span className="text-4xl font-light text-blue-200">Pro</span>
+        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="bg-white/20 p-3 rounded-2xl">
+                <UserCircleIcon className="h-10 w-10 text-white" />
+              </div>
+              <div>
+                <div className="flex items-baseline">
+                  <span className="text-3xl font-bold">MESMTF</span>
+                  <span className="text-2xl font-light text-blue-200 ml-1">Pro</span>
+                </div>
+                <p className="text-blue-100 text-sm">Ministry of Health & Social Services</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="bg-white/20 px-3 py-1 rounded-full text-sm">
+                Step {currentStep} of 3
+              </div>
             </div>
           </div>
-          <h2 className="text-2xl font-bold">Patient Registration</h2>
-          <p className="mt-2 opacity-90">
-            Create your patient account to access medical services
-          </p>
+          
+          <div className="mt-6 text-center">
+            <h2 className="text-2xl font-bold">Patient Registration</h2>
+            <p className="mt-2 opacity-90">
+              Create your secure patient account in three simple steps
+            </p>
+          </div>
         </div>
 
         {/* Connection Status */}
@@ -317,85 +315,103 @@ const Register = () => {
 
         {/* Error Message */}
         {error && supabaseStatus === 'connected' && (
-          <div className="mx-8 mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="mx-8 mt-6 bg-red-50 border-l-4 border-red-500 rounded-lg p-4">
             <div className="flex items-center">
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mr-2" />
-              <p className="text-red-700 text-sm">{error}</p>
+              <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mr-3" />
+              <p className="text-red-700 font-medium">{error}</p>
             </div>
           </div>
         )}
 
-        {/* Progress Bar */}
-        <div className="px-8 pt-6">
-          <div className="flex items-center justify-between mb-8">
-            {[1, 2, 3].map((step) => (
-              <div key={step} className="flex items-center">
-                <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-                  step === currentStep 
-                    ? 'bg-blue-600 text-white' 
-                    : step < currentStep 
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-300 text-gray-600'
-                }`}>
-                  {step}
+        {/* Progress Steps */}
+        <div className="px-8 pt-8">
+          <div className="flex items-center justify-between mb-2">
+            {['Personal Info', 'Contact Details', 'Account Setup'].map((label, index) => (
+              <div key={index} className="flex flex-col items-center flex-1">
+                <div className={`flex items-center justify-center w-12 h-12 rounded-full border-2 ${
+                  currentStep > index + 1 
+                    ? 'bg-green-500 border-green-500 text-white' 
+                    : currentStep === index + 1
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'bg-white border-gray-300 text-gray-400'
+                } transition-all duration-300`}>
+                  {currentStep > index + 1 ? (
+                    <CheckCircleIcon className="h-6 w-6" />
+                  ) : (
+                    <span className="font-semibold">{index + 1}</span>
+                  )}
                 </div>
-                {step < 3 && (
-                  <div className={`w-24 h-1 mx-2 ${
-                    step < currentStep ? 'bg-green-500' : 'bg-gray-300'
-                  }`}></div>
-                )}
+                <span className={`mt-2 text-sm font-medium ${
+                  currentStep >= index + 1 ? 'text-blue-600' : 'text-gray-400'
+                }`}>
+                  {label}
+                </span>
               </div>
             ))}
           </div>
-          <div className="flex justify-between text-sm text-gray-600 mb-8">
-            <span className={currentStep >= 1 ? 'text-blue-600 font-medium' : ''}>Personal Info</span>
-            <span className={currentStep >= 2 ? 'text-blue-600 font-medium' : ''}>Contact Details</span>
-            <span className={currentStep >= 3 ? 'text-blue-600 font-medium' : ''}>Account Setup</span>
+          
+          {/* Progress Bar */}
+          <div className="relative mb-8">
+            <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 transform -translate-y-1/2"></div>
+            <div 
+              className="absolute top-1/2 left-0 h-1 bg-blue-600 transform -translate-y-1/2 transition-all duration-500"
+              style={{ width: `${((currentStep - 1) / 2) * 100}%` }}
+            ></div>
           </div>
         </div>
 
         {/* Registration Form */}
-        <form className="px-8 pb-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="px-8 pb-8 space-y-8" onSubmit={handleSubmit}>
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
             <div className="space-y-6 animate-fade-in">
-              <h3 className="text-lg font-semibold text-gray-900">Personal Information</h3>
+              <div className="bg-blue-50 rounded-xl p-4">
+                <h3 className="text-lg font-semibold text-blue-900 flex items-center">
+                  <UserCircleIcon className="h-5 w-5 mr-2" />
+                  Personal Information
+                </h3>
+                <p className="text-blue-700 text-sm mt-1">
+                  Please provide your basic personal details
+                </p>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
-      First Name *
-    </label>
-    <input
-      id="firstName"
-      name="firstName"
-      type="text"
-      required
-      value={formData.firstName}
-      onChange={handleChange}
-      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-      placeholder="Enter your first name"
-    />
-  </div>
-  
-  <div>
-    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
-      Last Name *
-    </label>
-    <input
-      id="lastName"
-      name="lastName"
-      type="text"
-      required
-      value={formData.lastName}
-      onChange={handleChange}
-      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-      placeholder="Enter your last name"
-    />
-  </div>
+                  <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <UserCircleIcon className="h-4 w-4 mr-1 text-gray-400" />
+                    First Name *
+                  </label>
+                  <input
+                    id="firstName"
+                    name="firstName"
+                    type="text"
+                    required
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    placeholder="Enter your first name"
+                  />
+                </div>
+                
+                <div>
+                  <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
+                    Last Name *
+                  </label>
+                  <input
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    required
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    placeholder="Enter your last name"
+                  />
+                </div>
 
                 <div>
-                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <CalendarIcon className="h-4 w-4 mr-1 text-gray-400" />
                     Date of Birth *
                   </label>
                   <input
@@ -405,9 +421,8 @@ const Register = () => {
                     required
                     value={formData.dateOfBirth}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
                     max={new Date().toISOString().split('T')[0]}
-                    disabled={isLoading || supabaseStatus !== 'connected'}
                   />
                 </div>
 
@@ -421,18 +436,19 @@ const Register = () => {
                     required
                     value={formData.gender}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                    disabled={isLoading || supabaseStatus !== 'connected'}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
                   >
                     <option value="">Select gender</option>
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                     <option value="other">Other</option>
+                    <option value="prefer_not_to_say">Prefer not to say</option>
                   </select>
                 </div>
 
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="md:col-span-2">
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <PhoneIcon className="h-4 w-4 mr-1 text-gray-400" />
                     Phone Number *
                   </label>
                   <input
@@ -442,21 +458,22 @@ const Register = () => {
                     required
                     value={formData.phone}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
                     placeholder="e.g., 264812345678"
-                    disabled={isLoading || supabaseStatus !== 'connected'}
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end pt-4">
                 <button
                   type="button"
                   onClick={nextStep}
-                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium disabled:opacity-50"
-                  disabled={isLoading || supabaseStatus !== 'connected'}
+                  className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center"
                 >
-                  Next: Contact Details
+                  Continue to Contact Details
+                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -465,10 +482,19 @@ const Register = () => {
           {/* Step 2: Contact Details */}
           {currentStep === 2 && (
             <div className="space-y-6 animate-fade-in">
-              <h3 className="text-lg font-semibold text-gray-900">Contact Details</h3>
+              <div className="bg-blue-50 rounded-xl p-4">
+                <h3 className="text-lg font-semibold text-blue-900 flex items-center">
+                  <EnvelopeIcon className="h-5 w-5 mr-2" />
+                  Contact Details
+                </h3>
+                <p className="text-blue-700 text-sm mt-1">
+                  How we can contact you for appointments and updates
+                </p>
+              </div>
               
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                  <EnvelopeIcon className="h-4 w-4 mr-1 text-gray-400" />
                   Email Address *
                 </label>
                 <input
@@ -478,14 +504,14 @@ const Register = () => {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
                   placeholder="Enter your email address"
-                  disabled={isLoading || supabaseStatus !== 'connected'}
                 />
               </div>
 
               <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                  <MapPinIcon className="h-4 w-4 mr-1 text-gray-400" />
                   Residential Address *
                 </label>
                 <textarea
@@ -495,28 +521,31 @@ const Register = () => {
                   value={formData.address}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
-                  placeholder="Enter your complete address including city and postal code"
-                  disabled={isLoading || supabaseStatus !== 'connected'}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                  placeholder="Enter your complete address including street, city, and postal code"
                 />
               </div>
 
-              <div className="flex justify-between">
+              <div className="flex justify-between pt-4">
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="text-gray-600 px-6 py-3 rounded-lg hover:bg-gray-100 transition duration-200 font-medium disabled:opacity-50"
-                  disabled={isLoading}
+                  className="text-gray-600 px-6 py-3 rounded-lg hover:bg-gray-100 transition duration-200 font-medium border border-gray-300 disabled:opacity-50 flex items-center"
                 >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
                   Back
                 </button>
                 <button
                   type="button"
                   onClick={nextStep}
-                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium disabled:opacity-50"
-                  disabled={isLoading || supabaseStatus !== 'connected'}
+                  className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center"
                 >
-                  Next: Account Setup
+                  Continue to Account Setup
+                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -525,11 +554,20 @@ const Register = () => {
           {/* Step 3: Account Setup */}
           {currentStep === 3 && (
             <div className="space-y-6 animate-fade-in">
-              <h3 className="text-lg font-semibold text-gray-900">Account Setup</h3>
+              <div className="bg-blue-50 rounded-xl p-4">
+                <h3 className="text-lg font-semibold text-blue-900 flex items-center">
+                  <LockClosedIcon className="h-5 w-5 mr-2" />
+                  Account Security
+                </h3>
+                <p className="text-blue-700 text-sm mt-1">
+                  Create secure credentials for your account
+                </p>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="relative">
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <LockClosedIcon className="h-4 w-4 mr-1 text-gray-400" />
                     Password *
                   </label>
                   <input
@@ -539,16 +577,14 @@ const Register = () => {
                     required
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
+                    className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
                     placeholder="Minimum 8 characters"
                     minLength="8"
-                    disabled={isLoading || supabaseStatus !== 'connected'}
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-11 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                    className="absolute right-3 top-11 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowPassword(!showPassword)}
-                    disabled={isLoading}
                   >
                     {showPassword ? (
                       <EyeSlashIcon className="h-5 w-5" />
@@ -569,34 +605,37 @@ const Register = () => {
                     required
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
                     placeholder="Re-enter your password"
-                    disabled={isLoading || supabaseStatus !== 'connected'}
                   />
                 </div>
               </div>
 
               {/* Password requirements */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm font-medium text-gray-700 mb-2">Password must contain:</p>
-                <ul className="text-xs text-gray-600 space-y-1">
-                  <li className={formData.password.length >= 8 ? 'text-green-600' : ''}>
-                    • At least 8 characters
-                  </li>
-                  <li className={/(?=.*[a-z])/.test(formData.password) ? 'text-green-600' : ''}>
-                    • One lowercase letter
-                  </li>
-                  <li className={/(?=.*[A-Z])/.test(formData.password) ? 'text-green-600' : ''}>
-                    • One uppercase letter
-                  </li>
-                  <li className={/(?=.*\d)/.test(formData.password) ? 'text-green-600' : ''}>
-                    • One number
-                  </li>
-                </ul>
+              <div className="bg-gray-50 p-4 rounded-lg border">
+                <p className="text-sm font-medium text-gray-700 mb-3">Password Requirements:</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className={`flex items-center ${formData.password.length >= 8 ? 'text-green-600' : 'text-gray-500'}`}>
+                    <div className={`w-2 h-2 rounded-full mr-2 ${formData.password.length >= 8 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    At least 8 characters
+                  </div>
+                  <div className={`flex items-center ${/(?=.*[a-z])/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    <div className={`w-2 h-2 rounded-full mr-2 ${/(?=.*[a-z])/.test(formData.password) ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    One lowercase letter
+                  </div>
+                  <div className={`flex items-center ${/(?=.*[A-Z])/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    <div className={`w-2 h-2 rounded-full mr-2 ${/(?=.*[A-Z])/.test(formData.password) ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    One uppercase letter
+                  </div>
+                  <div className={`flex items-center ${/(?=.*\d)/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    <div className={`w-2 h-2 rounded-full mr-2 ${/(?=.*\d)/.test(formData.password) ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                    One number
+                  </div>
+                </div>
               </div>
 
               {/* Terms Agreement */}
-              <div className="bg-blue-50 p-4 rounded-lg">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <div className="flex items-start">
                   <input
                     id="terms"
@@ -604,7 +643,6 @@ const Register = () => {
                     type="checkbox"
                     required
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1"
-                    disabled={isLoading || supabaseStatus !== 'connected'}
                   />
                   <label htmlFor="terms" className="ml-3 text-sm text-gray-700">
                     I agree to the{' '}
@@ -614,24 +652,26 @@ const Register = () => {
                     and{' '}
                     <a href="#" className="text-blue-600 hover:text-blue-500 font-medium">
                       Privacy Policy
-                    </a>. I understand that this account is for patient use only and medical staff accounts are created by administrators.
+                    </a>. I understand that this account is for patient use only.
                   </label>
                 </div>
               </div>
 
-              <div className="flex justify-between">
+              <div className="flex justify-between pt-4">
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="text-gray-600 px-6 py-3 rounded-lg hover:bg-gray-100 transition duration-200 font-medium disabled:opacity-50"
-                  disabled={isLoading}
+                  className="text-gray-600 px-6 py-3 rounded-lg hover:bg-gray-100 transition duration-200 font-medium border border-gray-300 disabled:opacity-50 flex items-center"
                 >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
                   Back
                 </button>
                 <button
                   type="submit"
-                  disabled={isLoading || supabaseStatus !== 'connected'}
-                  className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition duration-200 font-medium disabled:opacity-50 flex items-center"
+                  disabled={isLoading}
+                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-8 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center"
                 >
                   {isLoading ? (
                     <>
@@ -639,7 +679,10 @@ const Register = () => {
                       Creating Account...
                     </>
                   ) : (
-                    'Complete Registration'
+                    <>
+                      <ShieldCheckIcon className="h-5 w-5 mr-2" />
+                      Complete Registration
+                    </>
                   )}
                 </button>
               </div>
@@ -648,15 +691,15 @@ const Register = () => {
         </form>
 
         {/* Footer */}
-        <div className="bg-gray-50 px-8 py-4 border-t text-center">
+        <div className="bg-gray-50 px-8 py-6 border-t text-center">
           <p className="text-sm text-gray-600">
             Already have an account?{' '}
             <Link to="/login" className="text-blue-600 hover:text-blue-500 font-medium">
-              Sign in here
+              Sign in to your account
             </Link>
           </p>
-          <p className="text-xs text-gray-500 mt-1">
-            Medical staff members: Please contact your administrator for account creation
+          <p className="text-xs text-gray-500 mt-2">
+            Medical staff members: Please contact your administrator for account setup
           </p>
         </div>
       </div>
