@@ -43,104 +43,137 @@ const PatientCare = () => {
     notes: ''
   });
 
-  const navigation = [
-    { name: 'Dashboard', href: '/nurse-dashboard', icon: UserGroupIcon, current: true },
-    { name: 'Patient Care', href: '/patient-care', icon: HeartIcon },
-    { name: 'Vital Signs', href: '/vitals', icon: ChartBarIcon },
-    { name: 'Medication', href: '/medication', icon: ClipboardDocumentListIcon },
-    { name: 'Medical Records', href: '/medical-records', icon: DocumentTextIcon },
-    { name: 'Patient Rounds', href: '/patient-rounds-page', icon: DocumentTextIcon },
-  ];
+const navigation = [
+  { name: 'Dashboard', href: '/nurse-dashboard', icon: UserGroupIcon },
+  { name: 'Patient Care', href: '/patient-care', icon: HeartIcon, current: true },
+  { name: 'Vital Signs', href: '/vitals', icon: ChartBarIcon },
+  { name: 'Medication', href: '/medication', icon: ClipboardDocumentListIcon },
+  { name: 'Medical Records', href: '/medical-records1', icon: DocumentTextIcon },
+  { name: 'Patient Rounds', href: '/patient-rounds-page', icon: DocumentTextIcon },
+];
 
   // Fetch patients and initial data
-  useEffect(() => {
-    const fetchPatientCareData = async () => {
-      if (!authUser) return;
+  // Fetch patients and initial data
+useEffect(() => {
+  const fetchPatientCareData = async () => {
+    if (!authUser) return;
 
-      try {
-        setLoading(true);
-        
-        // Get nurse profile
-        const { data: nurseData } = await supabase
-          .from('users')
-          .select(`
+    try {
+      setLoading(true);
+      
+      // Get nurse profile
+      const { data: nurseData } = await supabase
+        .from('users')
+        .select(`
+          *,
+          medical_staff!inner(
             *,
-            medical_staff!inner(
-              *,
-              departments(*)
-            )
-          `)
-          .eq('id', authUser.id)
-          .single();
+            departments(*)
+          )
+        `)
+        .eq('id', authUser.id)
+        .single();
 
-        setUser(nurseData);
+      setUser(nurseData);
 
-        // Fetch patients assigned to nurse's department
-        const { data: patientsData } = await supabase
-          .from('patients')
-          .select(`
-            id,
-            users!inner(
-              first_name,
-              last_name,
-              phone_number,
-              date_of_birth,
-              address
-            ),
-            blood_types(blood_type_code),
-            emergency_contact_name,
-            emergency_contact_phone,
-            medical_diagnoses(
-              diagnosis_date,
-              diseases(disease_name),
-              severity
-            ),
-            appointments(
-              appointment_date,
-              status_id,
-              doctors:medical_staff(
-                users(first_name, last_name)
-              )
-            ),
-            vital_signs(
-              blood_pressure_systolic,
-              blood_pressure_diastolic,
-              heart_rate,
-              temperature,
-              recorded_at
-            )
-          `)
-          .order('created_at', { ascending: false });
+      // First, get patient IDs assigned to this nurse
+      const { data: assignments } = await supabase
+        .from('nurse_patient_assignments')
+        .select('patient_id')
+        .eq('nurse_id', authUser.id)
+        .eq('is_active', true);
 
-        if (patientsData) {
-          setPatients(patientsData.map(patient => ({
-            id: patient.id,
-            name: `${patient.users.first_name} ${patient.users.last_name}`,
-            phone: patient.users.phone_number,
-            age: calculateAge(patient.users.date_of_birth),
-            bloodType: patient.blood_types?.blood_type_code || 'Unknown',
-            condition: patient.medical_diagnoses?.[0]?.diseases?.disease_name || 'Stable',
-            severity: patient.medical_diagnoses?.[0]?.severity || 'stable',
-            lastVitals: patient.vital_signs?.[0]?.recorded_at || null,
-            emergencyContact: patient.emergency_contact_name,
-            nextAppointment: patient.appointments?.[0]?.appointment_date || null
-          })));
-
-          // Select first patient by default
-          if (patientsData.length > 0) {
-            handlePatientSelect(patientsData[0].id);
-          }
-        }
-
-      } catch (error) {
-        console.error('Error fetching patient care data:', error);
-      } finally {
+      if (!assignments || assignments.length === 0) {
+        setPatients([]);
         setLoading(false);
+        return;
       }
-    };
 
-    fetchPatientCareData();
-  }, [authUser]);
+      const patientIds = assignments.map(assignment => assignment.patient_id);
+
+      // Fetch patients assigned to this nurse
+      const { data: patientsData } = await supabase
+        .from('patients')
+        .select(`
+          id,
+          users!inner(
+            first_name,
+            last_name,
+            phone_number,
+            date_of_birth,
+            address
+          ),
+          blood_type_id,
+          emergency_contact_name,
+          emergency_contact_phone,
+          insurance_provider
+        `)
+        .in('id', patientIds);
+
+      if (patientsData) {
+        // Fetch additional data for each patient
+        const patientsWithDetails = await Promise.all(
+          patientsData.map(async (patient) => {
+            // Fetch latest diagnosis
+            const { data: diagnosisData } = await supabase
+              .from('medical_diagnoses')
+              .select(`
+                severity,
+                diseases(disease_name)
+              `)
+              .eq('patient_id', patient.id)
+              .order('diagnosis_date', { ascending: false })
+              .limit(1)
+              .single();
+
+            // Fetch latest vital signs
+            const { data: vitalsData } = await supabase
+              .from('vital_signs')
+              .select('recorded_at')
+              .eq('patient_id', patient.id)
+              .order('recorded_at', { ascending: false })
+              .limit(1)
+              .single();
+
+            // Fetch blood type
+            const { data: bloodTypeData } = await supabase
+              .from('blood_types')
+              .select('blood_type_code')
+              .eq('id', patient.blood_type_id)
+              .single();
+
+            return {
+              id: patient.id,
+              name: `${patient.users.first_name} ${patient.users.last_name}`,
+              phone: patient.users.phone_number,
+              age: calculateAge(patient.users.date_of_birth),
+              bloodType: bloodTypeData?.blood_type_code || 'Unknown',
+              condition: diagnosisData?.diseases?.disease_name || 'Stable',
+              severity: diagnosisData?.severity || 'stable',
+              lastVitals: vitalsData?.recorded_at || null,
+              emergencyContact: patient.emergency_contact_name,
+              address: patient.users.address
+            };
+          })
+        );
+
+        setPatients(patientsWithDetails);
+
+        // Select first patient by default
+        if (patientsWithDetails.length > 0) {
+          handlePatientSelect(patientsWithDetails[0].id);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error fetching patient care data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchPatientCareData();
+}, [authUser]);
 
   const calculateAge = (dateOfBirth) => {
     if (!dateOfBirth) return 'Unknown';
@@ -155,97 +188,153 @@ const PatientCare = () => {
   };
 
   const handlePatientSelect = async (patientId) => {
-    try {
-      setSelectedPatient(patientId);
-      
-      // Fetch detailed patient information
-      const { data: patientData } = await supabase
-        .from('patients')
-        .select(`
-          *,
-          users(*),
-          blood_types(*),
-          medical_diagnoses(
-            *,
-            diseases(*),
-            doctors:medical_staff(users(first_name, last_name))
-          ),
-          patient_allergies(
-            *,
-            allergies(*),
-            allergy_severities(*)
-          ),
-          patient_conditions(
-            *,
-            medical_conditions(*)
-          )
-        `)
-        .eq('id', patientId)
-        .single();
+  try {
+    setSelectedPatient(patientId);
+    
+    // Fetch detailed patient information
+    const { data: patientData } = await supabase
+      .from('patients')
+      .select(`
+        *,
+        users(*),
+        blood_types(*)
+      `)
+      .eq('id', patientId)
+      .single();
 
-      setPatientDetails(patientData);
+    setPatientDetails(patientData);
 
-      // Fetch patient's vital signs history
-      const { data: vitalsData } = await supabase
-        .from('vital_signs')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('recorded_at', { ascending: false })
-        .limit(10);
+    // Fetch patient's medical diagnoses
+    const { data: diagnosesData } = await supabase
+      .from('medical_diagnoses')
+      .select(`
+        *,
+        diseases(*),
+        medical_staff(
+          users(first_name, last_name)
+        )
+      `)
+      .eq('patient_id', patientId)
+      .order('diagnosis_date', { ascending: false });
 
-      setVitalSigns(vitalsData || []);
+    // Fetch patient's allergies
+    const { data: allergiesData } = await supabase
+      .from('patient_allergies')
+      .select(`
+        *,
+        allergies(*),
+        allergy_severities(*)
+      `)
+      .eq('patient_id', patientId);
 
-      // Fetch patient's medical notes
-      const { data: notesData } = await supabase
-        .from('medical_notes')
-        .select(`
-          *,
-          note_types(*),
-          staff:medical_staff(users(first_name, last_name))
-        `)
-        .eq('patient_id', patientId)
-        .order('created_at', { ascending: false });
+    // Fetch patient's conditions
+    const { data: conditionsData } = await supabase
+      .from('patient_conditions')
+      .select(`
+        *,
+        medical_conditions(*)
+      `)
+      .eq('patient_id', patientId);
 
-      setMedicalNotes(notesData || []);
+    // Combine all data
+    setPatientDetails({
+      ...patientData,
+      medical_diagnoses: diagnosesData || [],
+      patient_allergies: allergiesData || [],
+      patient_conditions: conditionsData || []
+    });
 
-    } catch (error) {
-      console.error('Error fetching patient details:', error);
-    }
-  };
+    // Fetch patient's vital signs history
+    const { data: vitalsData } = await supabase
+      .from('vital_signs')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('recorded_at', { ascending: false })
+      .limit(10);
 
-  const addMedicalNote = async (e) => {
-    e.preventDefault();
-    try {
-      const { error } = await supabase
-        .from('medical_notes')
+    setVitalSigns(vitalsData || []);
+
+    // Fetch patient's medical notes
+    const { data: notesData } = await supabase
+      .from('medical_notes')
+      .select(`
+        *,
+        note_types(*),
+        medical_staff(
+          users(first_name, last_name)
+        )
+      `)
+      .eq('patient_id', patientId)
+      .order('created_at', { ascending: false });
+
+    setMedicalNotes(notesData || []);
+
+  } catch (error) {
+    console.error('Error fetching patient details:', error);
+  }
+};
+const addMedicalNote = async (e) => {
+  e.preventDefault();
+  try {
+    // First, get or create note type
+    let noteTypeId;
+    const { data: existingNoteType } = await supabase
+      .from('note_types')
+      .select('id')
+      .eq('type_name', newNote.type)
+      .single();
+
+    if (existingNoteType) {
+      noteTypeId = existingNoteType.id;
+    } else {
+      // Create new note type if it doesn't exist
+      const { data: newNoteType } = await supabase
+        .from('note_types')
         .insert({
-          patient_id: selectedPatient,
-          staff_id: authUser.id,
-          note_type_id: (await supabase.from('note_types').select('id').eq('type_name', newNote.type).single()).data?.id,
-          title: newNote.title,
-          content: newNote.content
-        });
-
-      if (error) throw error;
-
-      // Refresh notes
-      const { data: notesData } = await supabase
-        .from('medical_notes')
-        .select('*')
-        .eq('patient_id', selectedPatient)
-        .order('created_at', { ascending: false });
-
-      setMedicalNotes(notesData || []);
-      setShowNoteModal(false);
-      setNewNote({ title: '', content: '', type: 'general' });
-
-      alert('Note added successfully!');
-
-    } catch (error) {
-      console.error('Error adding medical note:', error);
-      alert('Error adding note: ' + error.message);
+          type_name: newNote.type,
+          description: `${newNote.type} note type`
+        })
+        .select()
+        .single();
+      noteTypeId = newNoteType.id;
     }
-  };
+
+    const { error } = await supabase
+      .from('medical_notes')
+      .insert({
+        patient_id: selectedPatient,
+        staff_id: authUser.id,
+        note_type_id: noteTypeId,
+        title: newNote.title,
+        content: newNote.content
+      });
+
+    if (error) throw error;
+
+    // Refresh notes
+    const { data: notesData } = await supabase
+      .from('medical_notes')
+      .select(`
+        *,
+        note_types(*),
+        medical_staff(
+          users(first_name, last_name)
+        )
+      `)
+      .eq('patient_id', selectedPatient)
+      .order('created_at', { ascending: false });
+
+    setMedicalNotes(notesData || []);
+    setShowNoteModal(false);
+    setNewNote({ title: '', content: '', type: 'general' });
+
+    alert('Note added successfully!');
+
+  } catch (error) {
+    console.error('Error adding medical note:', error);
+    alert('Error adding note: ' + error.message);
+  }
+};
 
   const recordVitalSigns = async (e) => {
     e.preventDefault();
