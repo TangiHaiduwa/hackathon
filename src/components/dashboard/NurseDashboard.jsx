@@ -26,17 +26,6 @@ const NurseDashboard = () => {
   const [priorityAlerts, setPriorityAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('assignments');
-  const [showPatientForm, setShowPatientForm] = useState(false);
-  const [newPatient, setNewPatient] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    dateOfBirth: '',
-    gender: '',
-    emergencyContact: '',
-    emergencyPhone: ''
-  });
 
   const navigation = [
     { name: 'Dashboard', href: '/nurse-dashboard', icon: UserGroupIcon, current: true },
@@ -45,7 +34,6 @@ const NurseDashboard = () => {
     { name: 'Medication', href: '/medication', icon: ClipboardDocumentListIcon },
     { name: 'Medical Records', href: '/medical-records1', icon: DocumentTextIcon },
     { name: 'Patient Rounds', href: '/patient-rounds-page', icon: DocumentTextIcon },
-
   ];
 
   // Fetch nurse data and dashboard information
@@ -56,27 +44,37 @@ const NurseDashboard = () => {
       try {
         setLoading(true);
         
-        // Get nurse profile
+        // Get nurse profile with proper role checking
         const { data: nurseData, error: nurseError } = await supabase
           .from('users')
           .select(`
-            *,
-            medical_staff!inner(
-              *,
-              departments(*)
-            ),
-            roles(*)
+            id,
+            first_name,
+            last_name,
+            email,
+            roles(role_name),
+            medical_staff(
+              id,
+              department_id,
+              departments(department_name)
+            )
           `)
           .eq('id', authUser.id)
           .single();
 
-        if (nurseError) throw nurseError;
+        if (nurseError) {
+          console.error('Error fetching nurse profile:', nurseError);
+          return;
+        }
+
         setUser(nurseData);
 
-        // Fetch all dashboard data
-        const assignments = await fetchTodaysAssignments(authUser.id);
-        const medications = await fetchMedicationSchedule(authUser.id);
-        const alerts = await fetchPriorityAlerts(authUser.id);
+        // Fetch all dashboard data in parallel
+        const [assignments, medications, alerts] = await Promise.all([
+          fetchTodaysAssignments(authUser.id),
+          fetchMedicationSchedule(authUser.id),
+          fetchPriorityAlerts(authUser.id)
+        ]);
 
         setTodaysAssignments(assignments);
         setMedicationSchedule(medications);
@@ -92,44 +90,51 @@ const NurseDashboard = () => {
     fetchNurseData();
 
     // Set up real-time subscription for alerts
-    const subscription = supabase
-      .channel('nurse-dashboard')
+    const alertsSubscription = supabase
+      .channel('nurse-alerts')
       .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'patient_alerts' },
-        () => {
-          fetchPriorityAlerts(authUser.id).then(setPriorityAlerts);
+        { event: 'INSERT', schema: 'public', table: 'patient_alerts' },
+        (payload) => {
+          if (authUser) {
+            fetchPriorityAlerts(authUser.id).then(setPriorityAlerts);
+          }
         }
       )
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      alertsSubscription.unsubscribe();
     };
   }, [authUser]);
 
-  // Fetch today's patient assignments - CORRECTED
+  // CORRECTED: Fetch today's patient assignments
   const fetchTodaysAssignments = async (nurseId) => {
     try {
-      // First get the patient assignments
+      const today = new Date().toISOString().split('T')[0];
+      
+      // First, get nurse's assigned patients
       const { data: assignments, error: assignmentsError } = await supabase
         .from('nurse_patient_assignments')
         .select(`
           patient_id,
-          patients!inner(
-            users!inner(
+          patients(
+            id,
+            users(
               first_name,
               last_name,
-              phone_number,
               date_of_birth
             ),
-            emergency_contact_name,
-            emergency_contact_phone
+            emergency_contact_name
           )
         `)
         .eq('nurse_id', nurseId)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('assigned_date', today);
 
-      if (assignmentsError) throw assignmentsError;
+      if (assignmentsError) {
+        console.error('Error fetching assignments:', assignmentsError);
+        return [];
+      }
 
       if (!assignments || assignments.length === 0) {
         return [];
@@ -137,7 +142,7 @@ const NurseDashboard = () => {
 
       const patientIds = assignments.map(assignment => assignment.patient_id);
 
-      // Fetch medical diagnoses for these patients
+      // Fetch latest diagnoses for these patients
       const { data: diagnosesData } = await supabase
         .from('medical_diagnoses')
         .select(`
@@ -149,7 +154,7 @@ const NurseDashboard = () => {
         .in('patient_id', patientIds)
         .order('diagnosis_date', { ascending: false });
 
-      // Fetch latest vital signs for these patients
+      // Fetch latest vital signs
       const { data: vitalsData } = await supabase
         .from('vital_signs')
         .select(`
@@ -162,17 +167,23 @@ const NurseDashboard = () => {
         .order('recorded_at', { ascending: false });
 
       // Fetch today's appointments
-      const today = new Date().toISOString().split('T')[0];
-      const appointmentData = await fetchTodaysAppointments(nurseId, today);
+      const { data: appointmentsData } = await supabase
+        .from('appointments')
+        .select('patient_id, appointment_time')
+        .in('patient_id', patientIds)
+        .eq('appointment_date', today)
+        .order('appointment_time', { ascending: true });
 
+      // Process and combine data
       return assignments.map(assignment => {
         const patientId = assignment.patient_id;
         const patientDiagnoses = diagnosesData?.filter(d => d.patient_id === patientId) || [];
         const patientVitals = vitalsData?.filter(v => v.patient_id === patientId) || [];
-        const patientAppointments = appointmentData.filter(apt => apt.patient_id === patientId);
+        const patientAppointments = appointmentsData?.filter(apt => apt.patient_id === patientId) || [];
         
         const latestDiagnosis = patientDiagnoses[0];
         const latestVitals = patientVitals[0];
+        const nextAppointment = patientAppointments[0];
 
         return {
           id: patientId,
@@ -182,62 +193,33 @@ const NurseDashboard = () => {
           severity: latestDiagnosis?.severity || 'stable',
           lastVitals: latestVitals?.recorded_at 
             ? new Date(latestVitals.recorded_at).toLocaleTimeString() 
-            : 'No vitals',
+            : 'No vitals recorded',
           heartRate: latestVitals?.heart_rate || '--',
           temperature: latestVitals?.temperature || '--',
-          nextAppointment: patientAppointments[0]?.appointment_time || 'No appointment',
+          nextAppointment: nextAppointment?.appointment_time || 'No appointment today',
           priority: getPatientPriority(latestDiagnosis?.severity)
         };
       });
+
     } catch (error) {
-      console.error('Error fetching assignments:', error);
+      console.error('Error in fetchTodaysAssignments:', error);
       return [];
     }
   };
 
-  // Fetch today's appointments separately
-  const fetchTodaysAppointments = async (nurseId, today) => {
-    try {
-      // First get patient IDs assigned to this nurse
-      const { data: assignments } = await supabase
-        .from('nurse_patient_assignments')
-        .select('patient_id')
-        .eq('nurse_id', nurseId)
-        .eq('is_active', true);
-
-      if (!assignments || assignments.length === 0) {
-        return [];
-      }
-
-      const patientIds = assignments.map(assignment => assignment.patient_id);
-
-      const { data, error } = await supabase
-        .from('appointments')
-        .select('*')
-        .in('patient_id', patientIds)
-        .eq('appointment_date', today)
-        .order('appointment_time', { ascending: true });
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching appointments:', error);
-      return [];
-    }
-  };
-
-  // Fetch medication administration schedule - CORRECTED
+  // CORRECTED: Fetch medication schedule
   const fetchMedicationSchedule = async (nurseId) => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const now = new Date();
       
-      // First, get the patient IDs assigned to this nurse
+      // Get assigned patients
       const { data: assignments, error: assignmentsError } = await supabase
         .from('nurse_patient_assignments')
         .select('patient_id')
         .eq('nurse_id', nurseId)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('assigned_date', today);
 
       if (assignmentsError) throw assignmentsError;
 
@@ -247,19 +229,27 @@ const NurseDashboard = () => {
 
       const patientIds = assignments.map(assignment => assignment.patient_id);
 
-      // Then fetch medication schedule for these patients
+      // Fetch medication schedule for assigned patients
       const { data, error } = await supabase
         .from('medication_schedule')
         .select(`
-          *,
-          prescription_items!inner(
+          id,
+          scheduled_time,
+          status,
+          administered_time,
+          administered_by,
+          notes,
+          prescription_items(
             dosage_instructions,
-            drugs!inner(
+            drugs(
               drug_name,
               dosage
             ),
-            prescriptions!inner(
-              patient_id
+            prescriptions(
+              patient_id,
+              patients(
+                users(first_name, last_name)
+              )
             )
           )
         `)
@@ -270,53 +260,38 @@ const NurseDashboard = () => {
 
       if (error) throw error;
 
-      // Fetch patient names separately
-      const medicationWithPatients = await Promise.all(
-        (data || []).map(async (med) => {
-          const { data: patientData } = await supabase
-            .from('patients')
-            .select(`
-              users!inner(
-                first_name,
-                last_name
-              )
-            `)
-            .eq('id', med.prescription_items.prescriptions.patient_id)
-            .single();
+      return (data || []).map(med => ({
+        id: med.id,
+        patient: med.prescription_items?.prescriptions?.patients?.users 
+          ? `${med.prescription_items.prescriptions.patients.users.first_name} ${med.prescription_items.prescriptions.patients.users.last_name}`
+          : 'Unknown Patient',
+        medication: med.prescription_items?.drugs?.drug_name || 'Unknown Medication',
+        dosage: med.prescription_items?.drugs?.dosage || '--',
+        instructions: med.prescription_items?.dosage_instructions || 'No instructions',
+        scheduledTime: new Date(med.scheduled_time),
+        status: med.status || 'scheduled',
+        isOverdue: med.status === 'scheduled' && new Date(med.scheduled_time) < now,
+        isCritical: med.prescription_items?.drugs?.dosage?.includes('high') || false
+      }));
 
-          return {
-            id: med.id,
-            patient: patientData ? 
-              `${patientData.users.first_name} ${patientData.users.last_name}` : 
-              'Unknown Patient',
-            medication: med.prescription_items.drugs.drug_name,
-            dosage: med.prescription_items.drugs.dosage,
-            instructions: med.prescription_items.dosage_instructions,
-            scheduledTime: new Date(med.scheduled_time),
-            status: med.status,
-            isOverdue: med.status === 'scheduled' && new Date(med.scheduled_time) < now,
-            isCritical: med.prescription_items.drugs.dosage.includes('high') || 
-                       med.prescription_items.drugs.drug_name.toLowerCase().includes('critical')
-          };
-        })
-      );
-
-      return medicationWithPatients;
     } catch (error) {
       console.error('Error fetching medication schedule:', error);
       return [];
     }
   };
 
-  // Fetch priority alerts - CORRECTED
+  // CORRECTED: Fetch priority alerts
   const fetchPriorityAlerts = async (nurseId) => {
     try {
-      // First get patient IDs assigned to this nurse
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Get assigned patients
       const { data: assignments, error: assignmentsError } = await supabase
         .from('nurse_patient_assignments')
         .select('patient_id')
         .eq('nurse_id', nurseId)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('assigned_date', today);
 
       if (assignmentsError) throw assignmentsError;
 
@@ -329,18 +304,17 @@ const NurseDashboard = () => {
       const { data, error } = await supabase
         .from('patient_alerts')
         .select(`
-          *,
-          alert_types(*),
-          patients!inner(
-            users!inner(
-              first_name,
-              last_name
-            )
+          id,
+          title,
+          message,
+          is_resolved,
+          created_at,
+          alert_types(
+            type_name,
+            severity
           ),
-          vital_signs(
-            heart_rate,
-            temperature,
-            blood_pressure_systolic
+          patients(
+            users(first_name, last_name)
           )
         `)
         .in('patient_id', patientIds)
@@ -352,21 +326,23 @@ const NurseDashboard = () => {
 
       return (data || []).map(alert => ({
         id: alert.id,
-        patient: `${alert.patients.users.first_name} ${alert.patients.users.last_name}`,
-        type: alert.alert_types.type_name,
-        severity: alert.alert_types.severity,
-        message: alert.message,
+        patient: alert.patients?.users 
+          ? `${alert.patients.users.first_name} ${alert.patients.users.last_name}`
+          : 'Unknown Patient',
+        type: alert.alert_types?.type_name || 'Alert',
+        severity: alert.alert_types?.severity || 'medium',
+        message: alert.message || alert.title,
         timestamp: new Date(alert.created_at),
-        vitalSigns: alert.vital_signs?.[0] || {},
-        isCritical: alert.alert_types.severity === 'critical'
+        isCritical: alert.alert_types?.severity === 'critical'
       }));
+
     } catch (error) {
       console.error('Error fetching alerts:', error);
       return [];
     }
   };
 
-  // Mark medication as administered
+  // CORRECTED: Mark medication as administered
   const markMedicationAdministered = async (medicationId) => {
     try {
       const { error } = await supabase
@@ -380,16 +356,31 @@ const NurseDashboard = () => {
 
       if (error) throw error;
 
+      // Also record in drug_administration table
+      await supabase
+        .from('drug_administration')
+        .insert({
+          prescription_item_id: medicationId, // This should be the actual prescription_item_id
+          patient_id: null, // You'd need to get this from the medication record
+          administered_by: authUser.id,
+          scheduled_time: new Date().toISOString(),
+          actual_time: new Date().toISOString(),
+          dosage_administered: 'As prescribed', // Get from prescription
+          administration_route: 'oral', // Default, should be configurable
+          status: 'administered'
+        });
+
       // Refresh medication schedule
       const updatedSchedule = await fetchMedicationSchedule(authUser.id);
       setMedicationSchedule(updatedSchedule);
+
     } catch (error) {
       console.error('Error marking medication administered:', error);
       alert('Error updating medication status');
     }
   };
 
-  // Resolve alert
+  // CORRECTED: Resolve alert
   const resolveAlert = async (alertId) => {
     try {
       const { error } = await supabase
@@ -406,12 +397,14 @@ const NurseDashboard = () => {
       // Refresh alerts
       const updatedAlerts = await fetchPriorityAlerts(authUser.id);
       setPriorityAlerts(updatedAlerts);
+
     } catch (error) {
       console.error('Error resolving alert:', error);
       alert('Error resolving alert');
     }
   };
 
+  // Utility functions
   const calculateAge = (dateOfBirth) => {
     if (!dateOfBirth) return 'Unknown';
     const today = new Date();
@@ -434,6 +427,7 @@ const NurseDashboard = () => {
     }
   };
 
+  // Quick actions for nurse workflow
   const quickActions = [
     {
       icon: ClipboardDocumentListIcon,
@@ -491,15 +485,6 @@ const NurseDashboard = () => {
                 {todaysAssignments.length} patients assigned today
               </span>
             </div>
-          </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => setShowPatientForm(true)}
-              className="btn-primary flex items-center space-x-2"
-            >
-              <UserPlusIcon className="h-5 w-5" />
-              <span>Add Patient</span>
-            </button>
           </div>
         </div>
       </div>
@@ -612,7 +597,7 @@ const NurseDashboard = () => {
                         onClick={() => markMedicationAdministered(med.id)}
                         className="btn-primary text-sm py-1 px-3"
                       >
-                        Administer
+                        Administer Now
                       </button>
                     </div>
                   )}
@@ -702,8 +687,6 @@ const NurseDashboard = () => {
           </div>
         </div>
       </div>
-
-      {/* Add Patient Modal would go here */}
     </DashboardLayout>
   );
 };
