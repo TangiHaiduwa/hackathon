@@ -15,9 +15,9 @@ import {
   MagnifyingGlassIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  HomeIcon,
   CalendarIcon,
   TruckIcon,
+  HomeIcon,
   ChartBarIcon,
   LightBulbIcon,
   AcademicCapIcon,
@@ -42,15 +42,21 @@ const DoctorDiagnosis = () => {
   const [diagnosisResults, setDiagnosisResults] = useState(null);
   const [differentialDiagnoses, setDifferentialDiagnoses] = useState([]);
   const [finalDiagnosis, setFinalDiagnosis] = useState(null);
+  const [medications, setMedications] = useState([]);
   const [treatmentPlan, setTreatmentPlan] = useState({
     medications: [],
     procedures: [],
     followUp: "",
     instructions: "",
+    additionalRecommendations: "",
+    followUpDate: "",
+    followUpType: ""
   });
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("patient");
   const [user, setUser] = useState(null);
+  const [availableMedications, setAvailableMedications] = useState([]);
+  const [inventoryCheck, setInventoryCheck] = useState({});
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -85,8 +91,11 @@ const DoctorDiagnosis = () => {
     },
     { name: "Reporting", href: "/doctor-reporting", icon: ChartBarIcon },
     { name: "Search", href: "/doctor-search", icon: MagnifyingGlassIcon },
-    // { name: 'Decision Support', href: '/doctor-decision-support', icon: LightBulbIcon },
-    // { name: 'Resources', href: '/doctor-resources', icon: AcademicCapIcon },
+    {
+      name: "Decision Support",
+      href: "/doctor-decision-support",
+      icon: LightBulbIcon,
+    },
   ];
 
   useEffect(() => {
@@ -97,6 +106,7 @@ const DoctorDiagnosis = () => {
     if (user) {
       fetchPatients();
       fetchSymptoms();
+      fetchMedications();
 
       // Check for patient ID in URL parameters
       const patientId = searchParams.get("patient");
@@ -105,6 +115,13 @@ const DoctorDiagnosis = () => {
       }
     }
   }, [user, searchParams]);
+
+  // Check medication availability when treatment plan tab is activated
+  useEffect(() => {
+    if (activeTab === "treatment" && finalDiagnosis) {
+      checkMedicationAvailability();
+    }
+  }, [activeTab, finalDiagnosis]);
 
   const fetchDoctorData = async () => {
     try {
@@ -195,7 +212,6 @@ const DoctorDiagnosis = () => {
       setPatients(uniquePatients);
     } catch (error) {
       console.error("Error fetching patients:", error.message);
-      // Optionally, set an error state to display to the user
     }
   };
 
@@ -221,6 +237,204 @@ const DoctorDiagnosis = () => {
     } catch (error) {
       console.error("Error fetching symptoms:", error);
     }
+  };
+
+  const fetchMedications = async () => {
+  try {
+    const { data, error } = await supabase
+      .from("drugs")
+      .select(`
+        id,
+        drug_name,
+        generic_name,
+        dosage,
+        requires_prescription,
+        drug_inventory!left (
+          quantity,
+          expiry_date
+        )
+      `)
+      .gt('drug_inventory.expiry_date', new Date().toISOString())
+      .gt('drug_inventory.quantity', 0)
+      .order("drug_name");
+
+    if (error) {
+      console.error("Error fetching medications:", error);
+      // Try without inventory join if it fails
+      const { data: simpleData, error: simpleError } = await supabase
+        .from("drugs")
+        .select("id, drug_name, generic_name, dosage, requires_prescription")
+        .order("drug_name");
+      
+      if (!simpleError) {
+        setMedications(simpleData || []);
+      }
+    } else {
+      setMedications(data || []);
+    }
+  } catch (error) {
+    console.error("Error fetching medications:", error);
+    // Set empty array as fallback
+    setMedications([]);
+  }
+};
+
+  const checkMedicationAvailability = async () => {
+    try {
+      // Get recommended medications based on diagnosis
+      const recommendedMeds = getRecommendedMedications(finalDiagnosis.disease);
+      
+      // Check inventory for each recommended medication
+      const inventoryPromises = recommendedMeds.map(async (med) => {
+        const { data, error } = await supabase
+          .from("drug_inventory")
+          .select(`
+            quantity,
+            drugs!inner(
+              id,
+              drug_name,
+              generic_name,
+              dosage,
+              requires_prescription
+            )
+          `)
+          .eq("drugs.drug_name", med.name)
+          .gt("quantity", 0)
+          .gt("expiry_date", new Date().toISOString())
+          .order("expiry_date", { ascending: true });
+
+        return {
+          medication: med,
+          available: data && data.length > 0,
+          inventory: data || [],
+          quantity: data ? data.reduce((sum, item) => sum + item.quantity, 0) : 0
+        };
+      });
+
+      const results = await Promise.all(inventoryPromises);
+      const inventoryMap = {};
+      results.forEach(result => {
+        inventoryMap[result.medication.name] = result;
+      });
+
+      setInventoryCheck(inventoryMap);
+
+      // Pre-populate treatment plan with available medications
+      const availableMeds = results.filter(r => r.available).map(r => ({
+        medication_id: r.inventory[0]?.drugs.id || "",
+        name: r.medication.name,
+        dosage: r.medication.dosage,
+        frequency: r.medication.frequency,
+        duration: r.medication.duration,
+        instructions: r.medication.instructions,
+        available: true,
+        inventory: r.inventory
+      }));
+
+      setTreatmentPlan(prev => ({
+        ...prev,
+        medications: availableMeds.length > 0 ? availableMeds : [{
+          medication_id: "",
+          name: "",
+          dosage: "",
+          frequency: "",
+          duration: "",
+          instructions: "",
+          available: false
+        }]
+      }));
+
+    } catch (error) {
+      console.error("Error checking medication availability:", error);
+    }
+  };
+
+  const getRecommendedMedications = (disease) => {
+    const recommendations = {
+      "Malaria": [
+        {
+          name: "Artemether-lumefantrine",
+          dosage: "20mg/120mg",
+          frequency: "Twice daily",
+          duration: "3 days",
+          instructions: "Take with fatty food"
+        },
+        {
+          name: "Artesunate",
+          dosage: "100mg",
+          frequency: "Once daily",
+          duration: "3 days", 
+          instructions: "Follow with primaquine if needed"
+        }
+      ],
+      "Typhoid Fever": [
+        {
+          name: "Azithromycin",
+          dosage: "500mg",
+          frequency: "Once daily", 
+          duration: "7 days",
+          instructions: "Take 1 hour before or 2 hours after food"
+        },
+        {
+          name: "Ceftriaxone",
+          dosage: "1g",
+          frequency: "Once daily",
+          duration: "10-14 days",
+          instructions: "Intravenous administration"
+        }
+      ],
+      "Influenza": [
+        {
+          name: "Oseltamivir",
+          dosage: "75mg",
+          frequency: "Twice daily",
+          duration: "5 days",
+          instructions: "Start within 48 hours of symptom onset"
+        }
+      ],
+      "Pneumonia": [
+        {
+          name: "Amoxicillin",
+          dosage: "500mg",
+          frequency: "Three times daily",
+          duration: "7 days",
+          instructions: "Take with plenty of water"
+        },
+        {
+          name: "Azithromycin",
+          dosage: "500mg",
+          frequency: "Once daily",
+          duration: "3 days",
+          instructions: "Take 1 hour before or 2 hours after food"
+        }
+      ],
+      "Gastroenteritis": [
+        {
+          name: "Oral Rehydration Solution",
+          dosage: "As needed",
+          frequency: "Frequently",
+          duration: "Until rehydrated",
+          instructions: "Drink small amounts frequently"
+        }
+      ],
+      "Acute Febrile Illness": [
+        {
+          name: "Paracetamol",
+          dosage: "500mg",
+          frequency: "Every 6 hours",
+          duration: "As needed",
+          instructions: "For fever and pain relief"
+        }
+      ]
+    };
+
+    return recommendations[disease] || [{
+      name: "Symptomatic Treatment",
+      dosage: "As needed",
+      frequency: "As required",
+      duration: "Until symptoms resolve",
+      instructions: "Rest and hydration recommended"
+    }];
   };
 
   const fetchPatientHistory = async (patientId) => {
@@ -284,122 +498,167 @@ const DoctorDiagnosis = () => {
 
     setLoading(true);
 
-    // Rule-based diagnosis logic (expanded from dashboard version)
-    const malariaSymptoms = [
-      "fever",
-      "chills",
-      "headache",
-      "nausea",
-      "vomiting",
-      "sweating",
-      "fatigue",
-      "abdominal pain",
-      "muscle pain",
-    ];
-    const typhoidSymptoms = [
-      "fever",
-      "headache",
-      "abdominal pain",
-      "constipation",
-      "diarrhea",
-      "rash",
-      "weakness",
-      "loss of appetite",
-    ];
+    // Enhanced disease symptom patterns
+    const diseasePatterns = {
+      Malaria: {
+        symptoms: [
+          "fever",
+          "chills",
+          "headache",
+          "nausea",
+          "vomiting",
+          "sweating",
+          "fatigue",
+          "abdominal pain",
+          "muscle pain",
+        ],
+        icd10: "B54",
+        baseProbability: 30,
+      },
+      "Typhoid Fever": {
+        symptoms: [
+          "fever",
+          "headache",
+          "abdominal pain",
+          "constipation",
+          "diarrhea",
+          "rash",
+          "weakness",
+          "loss of appetite",
+        ],
+        icd10: "A01.0",
+        baseProbability: 25,
+      },
+      Influenza: {
+        symptoms: [
+          "fever",
+          "cough",
+          "sore throat",
+          "runny nose",
+          "body ache",
+          "headache",
+          "fatigue",
+        ],
+        icd10: "J11.1",
+        baseProbability: 20,
+      },
+      Pneumonia: {
+        symptoms: [
+          "cough",
+          "fever",
+          "difficulty breathing",
+          "chest pain",
+          "fatigue",
+        ],
+        icd10: "J18.9",
+        baseProbability: 15,
+      },
+      Gastroenteritis: {
+        symptoms: ["diarrhea", "vomiting", "abdominal pain", "nausea", "fever"],
+        icd10: "A09",
+        baseProbability: 10,
+      },
+    };
 
-    let malariaScore = 0;
-    let typhoidScore = 0;
-    let hasVeryStrongSigns = false;
+    // Calculate scores for each disease
+    const diseaseScores = {};
 
-    selectedSymptoms.forEach((symptomId) => {
-      const symptom = symptoms.find((s) => s.id === symptomId);
-      if (symptom) {
-        const weight = symptom.category_id?.weight || 1;
-        const symptomName = symptom.symptom_name.toLowerCase();
+    Object.keys(diseasePatterns).forEach((disease) => {
+      const pattern = diseasePatterns[disease];
+      let score = pattern.baseProbability;
 
-        if (malariaSymptoms.some((ms) => symptomName.includes(ms))) {
-          malariaScore += weight;
+      selectedSymptoms.forEach((symptomId) => {
+        const symptom = symptoms.find((s) => s.id === symptomId);
+        if (symptom) {
+          const symptomName = symptom.symptom_name.toLowerCase();
+          const weight = symptom.category_id?.weight || 1;
+
+          if (
+            pattern.symptoms.some((patternSymptom) =>
+              symptomName.includes(patternSymptom)
+            )
+          ) {
+            score += weight * 10; // Increase score for matching symptoms
+          }
         }
-        if (typhoidSymptoms.some((ts) => symptomName.includes(ts))) {
-          typhoidScore += weight;
-        }
-        if (weight === 4) hasVeryStrongSigns = true;
-      }
+      });
+
+      diseaseScores[disease] = Math.min(score, 95); // Cap at 95%
     });
 
-    // Calculate probabilities
-    const totalScore = malariaScore + typhoidScore;
-    const malariaProbability =
-      totalScore > 0 ? (malariaScore / totalScore) * 100 : 0;
-    const typhoidProbability =
-      totalScore > 0 ? (typhoidScore / totalScore) * 100 : 0;
-
     // Generate differential diagnoses
-    const differentials = [];
-
-    if (malariaProbability >= 60) {
-      differentials.push({
-        disease: "Malaria",
-        probability: malariaProbability,
-        icd10: "B54",
-        confidence: "High",
+    const differentials = Object.keys(diseaseScores)
+      .filter((disease) => diseaseScores[disease] >= 40) // Only include diseases with >= 40% probability
+      .map((disease) => ({
+        disease: disease,
+        probability: diseaseScores[disease],
+        icd10: diseasePatterns[disease].icd10,
+        confidence:
+          diseaseScores[disease] >= 70
+            ? "High"
+            : diseaseScores[disease] >= 50
+            ? "Medium"
+            : "Low",
         supportingSymptoms: selectedSymptoms
           .filter((id) => {
             const symptom = symptoms.find((s) => s.id === id);
             return (
               symptom &&
-              malariaSymptoms.some((ms) =>
-                symptom.symptom_name.toLowerCase().includes(ms)
+              diseasePatterns[disease].symptoms.some((patternSymptom) =>
+                symptom.symptom_name.toLowerCase().includes(patternSymptom)
               )
             );
           })
           .map((id) => symptoms.find((s) => s.id === id).symptom_name),
-      });
-    }
+        severity:
+          diseaseScores[disease] >= 70
+            ? "severe"
+            : diseaseScores[disease] >= 50
+            ? "moderate"
+            : "mild",
+      }))
+      .sort((a, b) => b.probability - a.probability);
 
-    if (typhoidProbability >= 60) {
-      differentials.push({
-        disease: "Typhoid Fever",
-        probability: typhoidProbability,
-        icd10: "A01.0",
-        confidence: "High",
-        supportingSymptoms: selectedSymptoms
-          .filter((id) => {
-            const symptom = symptoms.find((s) => s.id === id);
-            return (
-              symptom &&
-              typhoidSymptoms.some((ts) =>
-                symptom.symptom_name.toLowerCase().includes(ts)
-              )
-            );
-          })
-          .map((id) => symptoms.find((s) => s.id === id).symptom_name),
-      });
-    }
-
-    // Add other possible diagnoses based on symptoms
-    if (
-      selectedSymptoms.some((id) => {
+    // If no specific diagnosis found, suggest general diagnosis
+    if (differentials.length === 0) {
+      const hasFever = selectedSymptoms.some((id) => {
         const symptom = symptoms.find((s) => s.id === id);
         return symptom && symptom.symptom_name.toLowerCase().includes("fever");
-      })
-    ) {
-      differentials.push({
-        disease: "Acute Febrile Illness",
-        probability: 40,
-        icd10: "R50.9",
-        confidence: "Medium",
-        supportingSymptoms: ["Fever"],
       });
+
+      if (hasFever) {
+        differentials.push({
+          disease: "Acute Febrile Illness",
+          probability: 60,
+          icd10: "R50.9",
+          confidence: "Medium",
+          supportingSymptoms: ["Fever"],
+          severity: "mild",
+        });
+      } else {
+        differentials.push({
+          disease: "General Medical Condition",
+          probability: 50,
+          icd10: "R69",
+          confidence: "Low",
+          supportingSymptoms: selectedSymptoms.map(
+            (id) => symptoms.find((s) => s.id === id).symptom_name
+          ),
+          severity: "mild",
+        });
+      }
     }
 
     setDiagnosisResults({
-      malariaProbability: Math.round(malariaProbability),
-      typhoidProbability: Math.round(typhoidProbability),
-      requiresChestXray: hasVeryStrongSigns,
-      differentialDiagnoses: differentials.sort(
-        (a, b) => b.probability - a.probability
-      ),
+      differentialDiagnoses: differentials,
+      requiresChestXray:
+        differentials.some((d) => d.disease === "Pneumonia") ||
+        selectedSymptoms.some((id) => {
+          const symptom = symptoms.find((s) => s.id === id);
+          return (
+            symptom && symptom.symptom_name.toLowerCase().includes("chest pain")
+          );
+        }),
     });
 
     setDifferentialDiagnoses(differentials);
@@ -407,108 +666,262 @@ const DoctorDiagnosis = () => {
     setLoading(false);
   };
 
-  const saveDiagnosis = async () => {
-    if (!finalDiagnosis || !selectedPatient) {
-      alert("Please select a final diagnosis and ensure patient is selected");
-      return;
+  const handleMedicationChange = (index, field, value) => {
+    const newMeds = [...treatmentPlan.medications];
+    newMeds[index][field] = value;
+
+    // If medication is selected, auto-populate based on recommendation
+    if (field === 'medication_id' && value) {
+      const selectedMed = medications.find(m => m.id === value);
+      if (selectedMed) {
+        const recommendation = getRecommendedMedications(finalDiagnosis.disease)
+          .find(rec => rec.name.toLowerCase().includes(selectedMed.drug_name.toLowerCase()) ||
+                     selectedMed.drug_name.toLowerCase().includes(rec.name.toLowerCase()));
+
+        if (recommendation) {
+          newMeds[index].dosage = recommendation.dosage;
+          newMeds[index].frequency = recommendation.frequency;
+          newMeds[index].duration = recommendation.duration;
+          newMeds[index].instructions = recommendation.instructions;
+        } else {
+          // Default values if no specific recommendation
+          newMeds[index].dosage = selectedMed.dosage || "As prescribed";
+          newMeds[index].frequency = "As directed";
+          newMeds[index].duration = "As needed";
+          newMeds[index].instructions = "Take as prescribed by doctor";
+        }
+      }
     }
 
-    try {
-      setLoading(true);
+    setTreatmentPlan(prev => ({ ...prev, medications: newMeds }));
+  };
 
-      // Get disease ID
-      const { data: disease } = await supabase
+  const handleSubmitTreatmentPlan = async () => {
+  if (!finalDiagnosis || !selectedPatient) {
+    alert("Please select a final diagnosis and ensure patient is selected");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    // First, ensure we have the disease in the database or create it if it doesn't exist
+    let diseaseId = null;
+    const { data: existingDisease } = await supabase
+      .from("diseases")
+      .select("id")
+      .eq("disease_name", finalDiagnosis.disease)
+      .single();
+
+    if (existingDisease) {
+      diseaseId = existingDisease.id;
+    } else {
+      // Create the disease if it doesn't exist
+      const { data: newDisease, error: diseaseError } = await supabase
         .from("diseases")
-        .select("id")
-        .eq("disease_name", finalDiagnosis.disease)
+        .insert({
+          disease_name: finalDiagnosis.disease,
+          icd_code: finalDiagnosis.icd10 || "R69", // Default to unspecified if no ICD code
+          description: `Auto-created for diagnosis: ${finalDiagnosis.disease}`,
+        })
+        .select()
         .single();
+      
+      if (diseaseError) {
+        console.error("Error creating disease:", diseaseError);
+        // Continue without disease ID if creation fails
+      } else {
+        diseaseId = newDisease.id;
+      }
+    }
 
-      // Get diagnosis status ID (confirmed)
-      const { data: status } = await supabase
+    // Get or create diagnosis status
+    let statusId = null;
+    const { data: statusData } = await supabase
+      .from("diagnosis_statuses")
+      .select("id")
+      .eq("status_code", "confirmed")
+      .single();
+
+    if (statusData) {
+      statusId = statusData.id;
+    } else {
+      // Create diagnosis status if it doesn't exist
+      const { data: newStatus } = await supabase
         .from("diagnosis_statuses")
-        .select("id")
-        .eq("status_code", "confirmed")
+        .insert({
+          status_code: "confirmed",
+          status_name: "Confirmed Diagnosis",
+          description: "Diagnosis has been confirmed by a doctor"
+        })
+        .select()
         .single();
+      
+      if (newStatus) statusId = newStatus.id;
+    }
 
-      // Save medical diagnosis
-      const { data: diagnosis, error: diagError } = await supabase
-        .from("medical_diagnoses")
+    // Save medical diagnosis
+    const { data: diagnosis, error: diagError } = await supabase
+      .from("medical_diagnoses")
+      .insert({
+        patient_id: selectedPatient.id,
+        doctor_id: user.id,
+        disease_id: diseaseId,
+        diagnosis_date: new Date().toISOString().split("T")[0],
+        status_id: statusId,
+        severity: finalDiagnosis.severity || "moderate",
+        notes: `Rule-based diagnosis. Confidence: ${finalDiagnosis.confidence}. ${clinicalFindings.notes || ''}`,
+      })
+      .select()
+      .single();
+
+    if (diagError) {
+      console.error("Diagnosis error details:", diagError);
+      throw diagError;
+    }
+
+    // Save diagnosis symptoms
+    if (selectedSymptoms.length > 0) {
+      const symptomInserts = selectedSymptoms.map(symptomId => ({
+        diagnosis_id: diagnosis.id,
+        symptom_id: symptomId,
+      }));
+
+      const { error: symptomsError } = await supabase
+        .from("diagnosis_symptoms")
+        .insert(symptomInserts);
+
+      if (symptomsError) {
+        console.error("Symptoms error:", symptomsError);
+        // Don't throw here - continue with diagnosis even if symptoms fail
+      }
+    }
+
+    // Save vital signs if any are provided
+    const hasVitalSigns = clinicalFindings.temperature || 
+                         clinicalFindings.bloodPressureSystolic || 
+                         clinicalFindings.heartRate;
+
+    if (hasVitalSigns) {
+      const { error: vitalError } = await supabase
+        .from("vital_signs")
         .insert({
           patient_id: selectedPatient.id,
+          taken_by: user.id,
+          temperature: clinicalFindings.temperature ? parseFloat(clinicalFindings.temperature) : null,
+          blood_pressure_systolic: clinicalFindings.bloodPressureSystolic ? parseInt(clinicalFindings.bloodPressureSystolic) : null,
+          blood_pressure_diastolic: clinicalFindings.bloodPressureDiastolic ? parseInt(clinicalFindings.bloodPressureDiastolic) : null,
+          heart_rate: clinicalFindings.heartRate ? parseInt(clinicalFindings.heartRate) : null,
+          respiratory_rate: clinicalFindings.respiratoryRate ? parseInt(clinicalFindings.respiratoryRate) : null,
+          oxygen_saturation: clinicalFindings.oxygenSaturation ? parseFloat(clinicalFindings.oxygenSaturation) : null,
+          notes: clinicalFindings.physicalExam || "Recorded during diagnosis",
+        });
+
+      if (vitalError) {
+        console.error("Vital signs error:", vitalError);
+        // Continue even if vital signs fail
+      }
+    }
+
+    // Save treatment plan and prescriptions if medications are specified
+    if (treatmentPlan.medications.length > 0 && treatmentPlan.medications.some(med => med.medication_id)) {
+      // Get or create prescription status
+      let prescriptionStatusId = null;
+      const { data: presStatusData } = await supabase
+        .from("prescription_statuses")
+        .select("id")
+        .eq("status_code", "active")
+        .single();
+
+      if (presStatusData) {
+        prescriptionStatusId = presStatusData.id;
+      } else {
+        // Create prescription status if it doesn't exist
+        const { data: newPresStatus } = await supabase
+          .from("prescription_statuses")
+          .insert({
+            status_code: "active",
+            status_name: "Active Prescription",
+            description: "Prescription is currently active"
+          })
+          .select()
+          .single();
+        
+        if (newPresStatus) prescriptionStatusId = newPresStatus.id;
+      }
+
+      // Create prescription
+      const { data: prescription, error: presError } = await supabase
+        .from("prescriptions")
+        .insert({
+          diagnosis_id: diagnosis.id,
+          patient_id: selectedPatient.id,
           doctor_id: user.id,
-          disease_id: disease?.id,
-          diagnosis_date: new Date().toISOString().split("T")[0],
-          status_id: status?.id,
-          severity: finalDiagnosis.severity || "moderate",
-          notes: `Rule-based diagnosis. Confidence: ${finalDiagnosis.confidence}. ${clinicalFindings.notes}`,
+          prescription_date: new Date().toISOString().split("T")[0],
+          status_id: prescriptionStatusId,
+          notes: treatmentPlan.additionalRecommendations || `Treatment for ${finalDiagnosis.disease}`,
         })
         .select()
         .single();
 
-      if (diagError) throw diagError;
+      if (presError) {
+        console.error("Prescription error:", presError);
+        // Continue without prescription if it fails
+      } else {
+        // Save prescription items
+        const prescriptionItems = treatmentPlan.medications
+          .filter(med => med.medication_id && med.dosage)
+          .map(med => ({
+            prescription_id: prescription.id,
+            drug_id: med.medication_id,
+            quantity: 1, // Default quantity
+            dosage_instructions: `${med.dosage}, ${med.frequency}, ${med.duration}. ${med.instructions || ''}`.trim(),
+            duration_days: parseInt(med.duration) || (med.duration.includes('day') ? parseInt(med.duration) : 7),
+          }));
 
-      // Save diagnosis symptoms
-      for (const symptomId of selectedSymptoms) {
-        await supabase.from("diagnosis_symptoms").insert({
-          diagnosis_id: diagnosis.id,
-          symptom_id: symptomId,
-        });
+        if (prescriptionItems.length > 0) {
+          const { error: itemsError } = await supabase
+            .from("prescription_items")
+            .insert(prescriptionItems);
+
+          if (itemsError) {
+            console.error("Prescription items error:", itemsError);
+            // Continue even if prescription items fail
+          }
+        }
       }
-
-      // Save vital signs
-      if (
-        clinicalFindings.temperature ||
-        clinicalFindings.bloodPressureSystolic
-      ) {
-        await supabase.from("vital_signs").insert({
-          patient_id: selectedPatient.id,
-          taken_by: user.id,
-          temperature: clinicalFindings.temperature
-            ? parseFloat(clinicalFindings.temperature)
-            : null,
-          blood_pressure_systolic: clinicalFindings.bloodPressureSystolic
-            ? parseInt(clinicalFindings.bloodPressureSystolic)
-            : null,
-          blood_pressure_diastolic: clinicalFindings.bloodPressureDiastolic
-            ? parseInt(clinicalFindings.bloodPressureDiastolic)
-            : null,
-          heart_rate: clinicalFindings.heartRate
-            ? parseInt(clinicalFindings.heartRate)
-            : null,
-          respiratory_rate: clinicalFindings.respiratoryRate
-            ? parseInt(clinicalFindings.respiratoryRate)
-            : null,
-          oxygen_saturation: clinicalFindings.oxygenSaturation
-            ? parseFloat(clinicalFindings.oxygenSaturation)
-            : null,
-          notes: clinicalFindings.physicalExam,
-        });
-      }
-
-      // Save treatment plan
-      if (
-        treatmentPlan.medications.length > 0 ||
-        treatmentPlan.procedures.length > 0
-      ) {
-        // This would be expanded to save actual treatment plan
-        console.log("Treatment plan to be saved:", treatmentPlan);
-      }
-
-      alert("Diagnosis saved successfully!");
-      navigate("/doctor-prescriptions", {
-        state: {
-          patientId: selectedPatient.id,
-          diagnosisId: diagnosis.id,
-          disease: finalDiagnosis.disease,
-        },
-      });
-    } catch (error) {
-      console.error("Error saving diagnosis:", error);
-      alert("Error saving diagnosis. Please try again.");
-    } finally {
-      setLoading(false);
     }
-  };
+
+    alert("Diagnosis and treatment plan saved successfully!");
+    
+    // Navigate to prescriptions page
+    navigate("/doctor-prescriptions", {
+      state: {
+        patientId: selectedPatient.id,
+        diagnosisId: diagnosis.id,
+        disease: finalDiagnosis.disease,
+      },
+    });
+
+  } catch (error) {
+    console.error("Error saving diagnosis:", error);
+    
+    // More detailed error message
+    let errorMessage = "Error saving diagnosis. Please try again.";
+    
+    if (error.code === '23503') { // Foreign key violation
+      errorMessage = "Database reference error. Please check if all required reference data exists.";
+    } else if (error.code === '23505') { // Unique violation
+      errorMessage = "Duplicate record detected. Please refresh and try again.";
+    } else if (error.message) {
+      errorMessage = `Error: ${error.message}`;
+    }
+    
+    alert(errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const renderPatientSelection = () => (
     <div className="card-medical">
@@ -883,46 +1296,6 @@ const DoctorDiagnosis = () => {
 
   const renderDiagnosisResults = () => (
     <div className="space-y-6">
-      {/* Rule-Based Results */}
-      <div className="card-medical">
-        <div className="px-6 py-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Rule-Based Diagnosis Results
-          </h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">
-                {diagnosisResults.malariaProbability}%
-              </div>
-              <div className="text-sm text-blue-800">Malaria Probability</div>
-            </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg">
-              <div className="text-2xl font-bold text-orange-600">
-                {diagnosisResults.typhoidProbability}%
-              </div>
-              <div className="text-sm text-orange-800">Typhoid Probability</div>
-            </div>
-          </div>
-
-          {diagnosisResults.requiresChestXray && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center">
-                <XCircleIcon className="h-5 w-5 text-yellow-600 mr-2" />
-                <span className="font-medium text-yellow-800">
-                  Chest X-ray Recommended
-                </span>
-              </div>
-              <p className="text-sm text-yellow-700 mt-1">
-                Very strong signs detected. Recommend chest X-ray in addition to
-                standard treatment.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Differential Diagnosis */}
       <div className="card-medical">
         <div className="px-6 py-4 border-b">
@@ -938,7 +1311,7 @@ const DoctorDiagnosis = () => {
                 key={index}
                 className={`border rounded-lg p-4 cursor-pointer transition-all ${
                   finalDiagnosis?.disease === diagnosis.disease
-                    ? "border-blue-500 bg-blue-50"
+                    ? "border-blue-500 bg-blue-50 ring-2 ring-blue-300"
                     : "border-gray-200 hover:border-blue-300"
                 }`}
                 onClick={() => setFinalDiagnosis(diagnosis)}
@@ -957,7 +1330,7 @@ const DoctorDiagnosis = () => {
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-bold text-blue-600">
-                      {diagnosis.probability}%
+                      {Math.round(diagnosis.probability)}%
                     </div>
                     <div
                       className={`text-xs px-2 py-1 rounded ${
@@ -1018,7 +1391,9 @@ const DoctorDiagnosis = () => {
             <button
               onClick={() => setActiveTab("treatment")}
               disabled={!finalDiagnosis}
-              className="btn-primary"
+              className={`btn-primary ${
+                !finalDiagnosis ? "opacity-50 cursor-not-allowed" : ""
+              }`}
             >
               Continue to Treatment Plan
             </button>
@@ -1035,9 +1410,31 @@ const DoctorDiagnosis = () => {
         <p className="text-sm text-gray-600">
           Create treatment plan for {finalDiagnosis?.disease}
         </p>
+        
+        {/* Inventory Status Alert */}
+        {Object.keys(inventoryCheck).length > 0 && (
+          <div className="mt-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
+            <h4 className="font-medium text-blue-900">Medication Availability</h4>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {Object.values(inventoryCheck).map((item, idx) => (
+                <span
+                  key={idx}
+                  className={`text-xs px-2 py-1 rounded ${
+                    item.available 
+                      ? "bg-green-100 text-green-800" 
+                      : "bg-red-100 text-red-800"
+                  }`}
+                >
+                  {item.medication.name}: {item.available ? `Available (${item.quantity})` : "Out of Stock"}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
       <div className="p-6">
-        {/* Treatment recommendations based on diagnosis */}
+        {/* Treatment recommendations */}
         {finalDiagnosis && (
           <div className="mb-6">
             <h4 className="font-medium text-gray-900 mb-3">
@@ -1047,23 +1444,40 @@ const DoctorDiagnosis = () => {
               {finalDiagnosis.disease === "Malaria" && (
                 <div>
                   <p className="text-sm text-blue-800">
-                    <strong>First-line treatment:</strong>{" "}
-                    Artemether-lumefantrine (Coartem) or Artesunate-based
-                    therapy
+                    <strong>First-line treatment:</strong> Artemether-lumefantrine or Artesunate-based therapy
                   </p>
                   <p className="text-sm text-blue-700 mt-1">
-                    <strong>Duration:</strong> 3 days for uncomplicated malaria
+                    <strong>Supportive care:</strong> Hydration, antipyretics, rest
                   </p>
                 </div>
               )}
               {finalDiagnosis.disease === "Typhoid Fever" && (
                 <div>
                   <p className="text-sm text-blue-800">
-                    <strong>First-line treatment:</strong> Azithromycin or
-                    Ceftriaxone for severe cases
+                    <strong>Antibiotic therapy:</strong> Azithromycin or Ceftriaxone
                   </p>
                   <p className="text-sm text-blue-700 mt-1">
-                    <strong>Duration:</strong> 7-14 days depending on severity
+                    <strong>Supportive care:</strong> Adequate hydration, nutrition, antipyretics
+                  </p>
+                </div>
+              )}
+              {finalDiagnosis.disease === "Pneumonia" && (
+                <div>
+                  <p className="text-sm text-blue-800">
+                    <strong>Antibiotic therapy:</strong> Amoxicillin or Azithromycin
+                  </p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    <strong>Supportive care:</strong> Rest, hydration, oxygen if needed
+                  </p>
+                </div>
+              )}
+              {finalDiagnosis.disease === "Influenza" && (
+                <div>
+                  <p className="text-sm text-blue-800">
+                    <strong>Antiviral therapy:</strong> Oseltamivir (Tamiflu)
+                  </p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    <strong>Supportive care:</strong> Rest, hydration, antipyretics
                   </p>
                 </div>
               )}
@@ -1071,101 +1485,207 @@ const DoctorDiagnosis = () => {
           </div>
         )}
 
-        <div className="space-y-6">
-          <div>
-            <h4 className="font-medium text-gray-900 mb-3">Medications</h4>
-            <div className="space-y-3">
-              {treatmentPlan.medications.map((med, index) => (
-                <div
-                  key={index}
-                  className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
-                >
-                  <span className="flex-1">
-                    {med.name} - {med.dosage}
-                  </span>
-                  <button
-                    onClick={() =>
-                      setTreatmentPlan((prev) => ({
-                        ...prev,
-                        medications: prev.medications.filter(
-                          (_, i) => i !== index
-                        ),
-                      }))
-                    }
-                    className="text-red-600 hover:text-red-800"
+        {/* Medications section */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-medium text-gray-900">Medications</h4>
+            <button
+              type="button"
+              onClick={() => setTreatmentPlan(prev => ({
+                ...prev,
+                medications: [...prev.medications, {
+                  medication_id: "",
+                  name: "",
+                  dosage: "",
+                  frequency: "",
+                  duration: "",
+                  instructions: "",
+                  available: false
+                }]
+              }))}
+              className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+            >
+              Add Medication
+            </button>
+          </div>
+
+          {treatmentPlan.medications.map((med, index) => (
+            <div key={index} className="border rounded-lg p-4 mb-4 bg-white">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Medication
+                  </label>
+                  // In the medication select dropdown, add a fallback
+<select
+  value={med.medication_id}
+  onChange={(e) => handleMedicationChange(index, 'medication_id', e.target.value)}
+  className="w-full p-2 border rounded-md"
+  required
+>
+  <option value="">Select Medication</option>
+  {medications.length > 0 ? (
+    medications.map(medication => (
+      <option key={medication.id} value={medication.id}>
+        {medication.drug_name} {medication.dosage ? `- ${medication.dosage}` : ''}
+      </option>
+    ))
+  ) : (
+    <option value="" disabled>Loading medications...</option>
+  )}
+</select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dosage
+                  </label>
+                  <input
+                    type="text"
+                    value={med.dosage}
+                    onChange={(e) => handleMedicationChange(index, 'dosage', e.target.value)}
+                    className="w-full p-2 border rounded-md"
+                    placeholder="e.g., 500mg"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Frequency
+                  </label>
+                  <select
+                    value={med.frequency}
+                    onChange={(e) => handleMedicationChange(index, 'frequency', e.target.value)}
+                    className="w-full p-2 border rounded-md"
+                    required
                   >
-                    Remove
+                    <option value="">Select Frequency</option>
+                    <option value="Once daily">Once daily</option>
+                    <option value="Twice daily">Twice daily</option>
+                    <option value="Three times daily">Three times daily</option>
+                    <option value="Four times daily">Four times daily</option>
+                    <option value="As needed">As needed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Duration
+                  </label>
+                  <input
+                    type="text"
+                    value={med.duration}
+                    onChange={(e) => handleMedicationChange(index, 'duration', e.target.value)}
+                    className="w-full p-2 border rounded-md"
+                    placeholder="e.g., 7 days"
+                    required
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Instructions
+                  </label>
+                  <textarea
+                    value={med.instructions}
+                    onChange={(e) => handleMedicationChange(index, 'instructions', e.target.value)}
+                    className="w-full p-2 border rounded-md"
+                    rows="2"
+                    placeholder="Special instructions for the patient..."
+                  />
+                </div>
+              </div>
+
+              {treatmentPlan.medications.length > 1 && (
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newMeds = treatmentPlan.medications.filter((_, i) => i !== index);
+                      setTreatmentPlan(prev => ({ ...prev, medications: newMeds }));
+                    }}
+                    className="text-red-600 text-sm hover:text-red-800"
+                  >
+                    Remove Medication
                   </button>
                 </div>
-              ))}
-              <button
-                onClick={() =>
-                  setTreatmentPlan((prev) => ({
-                    ...prev,
-                    medications: [
-                      ...prev.medications,
-                      { name: "", dosage: "", frequency: "" },
-                    ],
-                  }))
-                }
-                className="btn-secondary flex items-center"
-              >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Add Medication
-              </button>
+              )}
             </div>
-          </div>
+          ))}
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Follow-up Instructions
-            </label>
-            <textarea
-              rows="3"
-              value={treatmentPlan.followUp}
-              onChange={(e) =>
-                setTreatmentPlan((prev) => ({
-                  ...prev,
-                  followUp: e.target.value,
-                }))
-              }
-              className="input-medical"
-              placeholder="Follow-up appointment timing, warning signs to watch for, etc."
-            />
-          </div>
+        {/* Additional recommendations */}
+        <div className="mb-6">
+          <h4 className="font-medium text-gray-900 mb-3">Additional Recommendations</h4>
+          <textarea
+            value={treatmentPlan.additionalRecommendations}
+            onChange={(e) => setTreatmentPlan(prev => ({
+              ...prev,
+              additionalRecommendations: e.target.value
+            }))}
+            className="w-full p-3 border rounded-md"
+            rows="4"
+            placeholder="Enter additional recommendations, lifestyle advice, follow-up instructions..."
+          />
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Patient Instructions
-            </label>
-            <textarea
-              rows="3"
-              value={treatmentPlan.instructions}
-              onChange={(e) =>
-                setTreatmentPlan((prev) => ({
+        {/* Follow-up plan */}
+        <div className="mb-6">
+          <h4 className="font-medium text-gray-900 mb-3">Follow-up Plan</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Follow-up Date
+              </label>
+              <input
+                type="date"
+                value={treatmentPlan.followUpDate}
+                onChange={(e) => setTreatmentPlan(prev => ({
                   ...prev,
-                  instructions: e.target.value,
-                }))
-              }
-              className="input-medical"
-              placeholder="Dietary restrictions, activity limitations, medication instructions..."
-            />
+                  followUpDate: e.target.value
+                }))}
+                className="w-full p-2 border rounded-md"
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Follow-up Type
+              </label>
+              <select
+                value={treatmentPlan.followUpType}
+                onChange={(e) => setTreatmentPlan(prev => ({
+                  ...prev,
+                  followUpType: e.target.value
+                }))}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="">Select Type</option>
+                <option value="clinic">Clinic Visit</option>
+                <option value="teleconsultation">Teleconsultation</option>
+                <option value="phone">Phone Follow-up</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-between mt-6">
+        {/* Submit button */}
+        <div className="flex justify-end space-x-3">
           <button
+            type="button"
             onClick={() => setActiveTab("diagnosis")}
-            className="btn-secondary"
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
           >
             Back to Diagnosis
           </button>
           <button
-            onClick={saveDiagnosis}
+            type="button"
+            onClick={handleSubmitTreatmentPlan}
             disabled={loading}
-            className="btn-primary"
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
           >
-            {loading ? "Saving..." : "Save Diagnosis & Treatment Plan"}
+            {loading ? "Saving..." : "Submit Treatment Plan"}
           </button>
         </div>
       </div>
@@ -1237,7 +1757,7 @@ const DoctorDiagnosis = () => {
           <div className="p-6">
             <div className="space-y-2">
               {selectedSymptoms.map((symptomId) => {
-                const symptom = symptoms.find((s) => s.id === symptomomId);
+                const symptom = symptoms.find((s) => s.id === symptomId);
                 return symptom ? (
                   <div
                     key={symptom.id}
