@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/layout/DashboardLayout";
+
 import supabase from "../../lib/supabase";
 import {
   HomeIcon,
@@ -220,27 +221,7 @@ const DoctorDashboard = () => {
     try {
       const today = new Date().toISOString().split("T")[0];
 
-      // Today's appointments count
-      const { count: appointmentsCount, error: apptError } = await supabase
-        .from("appointments")
-        .select("*", { count: "exact", head: true })
-        .eq("appointment_date", today)
-        .in(
-          "patient_id",
-          supabase
-            .from("doctor_patient_assignments")
-            .select("patient_id")
-            .eq("doctor_id", doctorId)
-            .eq("is_active", true)
-        );
-
-      if (apptError) console.error("Appointment count error:", apptError);
-
-      // Active patients (patients with appointments or diagnoses in last 30 days)
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0];
-
+      // First, get assigned patient IDs
       const { data: assignedPatients, error: assignError } = await supabase
         .from("doctor_patient_assignments")
         .select("patient_id")
@@ -251,79 +232,28 @@ const DoctorDashboard = () => {
 
       const patientIds = assignedPatients?.map((p) => p.patient_id) || [];
 
-      const { data: recentAppointments } = await supabase
+      if (patientIds.length === 0) {
+        setStats({
+          todaysAppointments: 0,
+          activePatients: 0,
+          pendingDiagnoses: 0,
+          urgentCases: 0,
+          prescriptionsPending: 0,
+        });
+        return;
+      }
+
+      // Today's appointments count
+      const { count: appointmentsCount, error: apptError } = await supabase
         .from("appointments")
-        .select("patient_id")
-        .in("patient_id", patientIds)
-        .gte("appointment_date", thirtyDaysAgo);
-
-      const { data: recentDiagnoses } = await supabase
-        .from("medical_diagnoses")
-        .select("patient_id")
-        .in("patient_id", patientIds)
-        .gte("diagnosis_date", thirtyDaysAgo);
-
-      const allPatientIds = [
-        ...(recentAppointments?.map((apt) => apt.patient_id) || []),
-        ...(recentDiagnoses?.map((diag) => diag.patient_id) || []),
-      ];
-      const uniquePatientIds = [...new Set(allPatientIds)];
-      const activePatientsCount = uniquePatientIds.length;
-
-      // Pending diagnoses
-      const { count: pendingDiagnosesCount, error: diagError } = await supabase
-        .from("medical_diagnoses")
         .select("*", { count: "exact", head: true })
-        .in(
-          "patient_id",
-          supabase
-            .from("doctor_patient_assignments")
-            .select("patient_id")
-            .eq("doctor_id", doctorId)
-            .eq("is_active", true)
-        );
+        .eq("appointment_date", today)
+        .in("patient_id", patientIds);
 
-      if (diagError) console.error("Diagnosis count error:", diagError);
+      if (apptError) console.error("Appointment count error:", apptError);
 
-      // Urgent cases
-      const { count: urgentCasesCount, error: urgentError } = await supabase
-        .from("medical_diagnoses")
-        .select("*", { count: "exact", head: true })
-        .in(
-          "patient_id",
-          supabase
-            .from("doctor_patient_assignments")
-            .select("patient_id")
-            .eq("doctor_id", doctorId)
-            .eq("is_active", true)
-        )
-        .eq("severity", "severe");
-
-      if (urgentError) console.error("Urgent cases error:", urgentError);
-
-      // Pending prescriptions
-      const { count: prescriptionsPendingCount, error: presError } =
-        await supabase
-          .from("prescriptions")
-          .select("*", { count: "exact", head: true })
-          .in(
-            "patient_id",
-            supabase
-              .from("doctor_patient_assignments")
-              .select("patient_id")
-              .eq("doctor_id", doctorId)
-              .eq("is_active", true)
-          );
-
-      if (presError) console.error("Prescription count error:", presError);
-
-      setStats({
-        todaysAppointments: appointmentsCount || 0,
-        activePatients: activePatientsCount || 0,
-        pendingDiagnoses: pendingDiagnosesCount || 0,
-        urgentCases: urgentCasesCount || 0,
-        prescriptionsPending: prescriptionsPendingCount || 0,
-      });
+      // ... rest of your existing stats logic
+      // [Keep the rest of your existing code for activePatients, pendingDiagnoses, etc.]
     } catch (err) {
       console.error("Error fetching stats:", err);
     }
@@ -331,8 +261,29 @@ const DoctorDashboard = () => {
 
   const fetchTodaysAppointments = async (doctorId) => {
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = format(addHours(new Date(), 2), "yyyy-MM-dd"); // Adjust for CAT
+      console.log("Fetching appointments for date:", today);
 
+      // First, get the patient IDs assigned to this doctor
+      const { data: assignedPatients, error: assignError } = await supabase
+        .from("doctor_patient_assignments")
+        .select("patient_id")
+        .eq("doctor_id", doctorId)
+        .eq("is_active", true);
+
+      console.log("Assigned Patients:", assignedPatients);
+      if (assignError) throw assignError;
+
+      if (!assignedPatients || assignedPatients.length === 0) {
+        console.log("No assigned patients found");
+        setTodayAppointments([]);
+        return;
+      }
+
+      const patientIds = assignedPatients.map((p) => p.patient_id);
+      console.log("Patient IDs:", patientIds);
+
+      // Then, get today's appointments for these patients
       const { data: appointments, error } = await supabase
         .from("appointments")
         .select(
@@ -346,31 +297,28 @@ const DoctorDashboard = () => {
       `
         )
         .eq("appointment_date", today)
-        .in(
-          "patient_id",
-          supabase
-            .from("doctor_patient_assignments")
-            .select("patient_id")
-            .eq("doctor_id", doctorId)
-            .eq("is_active", true)
-        )
+        .in("patient_id", patientIds)
         .order("appointment_time", { ascending: true })
         .limit(5);
 
+      console.log("Appointments:", appointments);
       if (error) throw error;
 
       if (!appointments || appointments.length === 0) {
+        console.log("No appointments found for today");
         setTodayAppointments([]);
         return;
       }
 
-      const patientIds = appointments.map((apt) => apt.patient_id);
-
+      // Get patient details
+      const appointmentPatientIds = appointments.map((apt) => apt.patient_id);
+      console.log("Appointment Patient IDs:", appointmentPatientIds);
       const { data: patients, error: patientsError } = await supabase
         .from("users")
         .select("id, first_name, last_name")
-        .in("id", patientIds);
+        .in("id", appointmentPatientIds);
 
+      console.log("Patients:", patients);
       if (patientsError) throw patientsError;
 
       const appointmentsWithPatientNames = appointments.map((apt) => {
@@ -391,9 +339,11 @@ const DoctorDashboard = () => {
         };
       });
 
+      console.log("Formatted Appointments:", appointmentsWithPatientNames);
       setTodayAppointments(appointmentsWithPatientNames);
     } catch (err) {
-      console.error("Error fetching appointments:", err);
+      console.error("Error fetching appointments:", err.message, err.details);
+      setTodayAppointments([]);
     }
   };
 

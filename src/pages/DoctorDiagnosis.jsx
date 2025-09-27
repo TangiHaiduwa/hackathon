@@ -42,6 +42,7 @@ const DoctorDiagnosis = () => {
   const [diagnosisResults, setDiagnosisResults] = useState(null);
   const [differentialDiagnoses, setDifferentialDiagnoses] = useState([]);
   const [finalDiagnosis, setFinalDiagnosis] = useState(null);
+  const [medications, setMedications] = useState([]);
   const [treatmentPlan, setTreatmentPlan] = useState({
     medications: [],
     procedures: [],
@@ -90,7 +91,6 @@ const DoctorDiagnosis = () => {
       href: "/doctor-decision-support",
       icon: LightBulbIcon,
     },
-    // { name: 'Resources', href: '/doctor-resources', icon: AcademicCapIcon },
   ];
 
   useEffect(() => {
@@ -101,6 +101,7 @@ const DoctorDiagnosis = () => {
     if (user) {
       fetchPatients();
       fetchSymptoms();
+      fetchMedications();
 
       // Check for patient ID in URL parameters
       const patientId = searchParams.get("patient");
@@ -199,7 +200,6 @@ const DoctorDiagnosis = () => {
       setPatients(uniquePatients);
     } catch (error) {
       console.error("Error fetching patients:", error.message);
-      // Optionally, set an error state to display to the user
     }
   };
 
@@ -224,6 +224,31 @@ const DoctorDiagnosis = () => {
       setSymptoms(data);
     } catch (error) {
       console.error("Error fetching symptoms:", error);
+    }
+  };
+
+  const fetchMedications = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("medications")
+        .select(
+          `
+          id,
+          medication_name,
+          generic_name,
+          dosage_form,
+          strength,
+          manufacturer,
+          stock_quantity,
+          reorder_level
+        `
+        )
+        .order("medication_name");
+
+      if (error) throw error;
+      setMedications(data || []);
+    } catch (error) {
+      console.error("Error fetching medications:", error);
     }
   };
 
@@ -288,122 +313,167 @@ const DoctorDiagnosis = () => {
 
     setLoading(true);
 
-    // Rule-based diagnosis logic (expanded from dashboard version)
-    const malariaSymptoms = [
-      "fever",
-      "chills",
-      "headache",
-      "nausea",
-      "vomiting",
-      "sweating",
-      "fatigue",
-      "abdominal pain",
-      "muscle pain",
-    ];
-    const typhoidSymptoms = [
-      "fever",
-      "headache",
-      "abdominal pain",
-      "constipation",
-      "diarrhea",
-      "rash",
-      "weakness",
-      "loss of appetite",
-    ];
+    // Enhanced disease symptom patterns
+    const diseasePatterns = {
+      Malaria: {
+        symptoms: [
+          "fever",
+          "chills",
+          "headache",
+          "nausea",
+          "vomiting",
+          "sweating",
+          "fatigue",
+          "abdominal pain",
+          "muscle pain",
+        ],
+        icd10: "B54",
+        baseProbability: 30,
+      },
+      "Typhoid Fever": {
+        symptoms: [
+          "fever",
+          "headache",
+          "abdominal pain",
+          "constipation",
+          "diarrhea",
+          "rash",
+          "weakness",
+          "loss of appetite",
+        ],
+        icd10: "A01.0",
+        baseProbability: 25,
+      },
+      Influenza: {
+        symptoms: [
+          "fever",
+          "cough",
+          "sore throat",
+          "runny nose",
+          "body ache",
+          "headache",
+          "fatigue",
+        ],
+        icd10: "J11.1",
+        baseProbability: 20,
+      },
+      Pneumonia: {
+        symptoms: [
+          "cough",
+          "fever",
+          "difficulty breathing",
+          "chest pain",
+          "fatigue",
+        ],
+        icd10: "J18.9",
+        baseProbability: 15,
+      },
+      Gastroenteritis: {
+        symptoms: ["diarrhea", "vomiting", "abdominal pain", "nausea", "fever"],
+        icd10: "A09",
+        baseProbability: 10,
+      },
+    };
 
-    let malariaScore = 0;
-    let typhoidScore = 0;
-    let hasVeryStrongSigns = false;
+    // Calculate scores for each disease
+    const diseaseScores = {};
 
-    selectedSymptoms.forEach((symptomId) => {
-      const symptom = symptoms.find((s) => s.id === symptomId);
-      if (symptom) {
-        const weight = symptom.category_id?.weight || 1;
-        const symptomName = symptom.symptom_name.toLowerCase();
+    Object.keys(diseasePatterns).forEach((disease) => {
+      const pattern = diseasePatterns[disease];
+      let score = pattern.baseProbability;
 
-        if (malariaSymptoms.some((ms) => symptomName.includes(ms))) {
-          malariaScore += weight;
+      selectedSymptoms.forEach((symptomId) => {
+        const symptom = symptoms.find((s) => s.id === symptomId);
+        if (symptom) {
+          const symptomName = symptom.symptom_name.toLowerCase();
+          const weight = symptom.category_id?.weight || 1;
+
+          if (
+            pattern.symptoms.some((patternSymptom) =>
+              symptomName.includes(patternSymptom)
+            )
+          ) {
+            score += weight * 10; // Increase score for matching symptoms
+          }
         }
-        if (typhoidSymptoms.some((ts) => symptomName.includes(ts))) {
-          typhoidScore += weight;
-        }
-        if (weight === 4) hasVeryStrongSigns = true;
-      }
+      });
+
+      diseaseScores[disease] = Math.min(score, 95); // Cap at 95%
     });
 
-    // Calculate probabilities
-    const totalScore = malariaScore + typhoidScore;
-    const malariaProbability =
-      totalScore > 0 ? (malariaScore / totalScore) * 100 : 0;
-    const typhoidProbability =
-      totalScore > 0 ? (typhoidScore / totalScore) * 100 : 0;
-
     // Generate differential diagnoses
-    const differentials = [];
-
-    if (malariaProbability >= 60) {
-      differentials.push({
-        disease: "Malaria",
-        probability: malariaProbability,
-        icd10: "B54",
-        confidence: "High",
+    const differentials = Object.keys(diseaseScores)
+      .filter((disease) => diseaseScores[disease] >= 40) // Only include diseases with >= 40% probability
+      .map((disease) => ({
+        disease: disease,
+        probability: diseaseScores[disease],
+        icd10: diseasePatterns[disease].icd10,
+        confidence:
+          diseaseScores[disease] >= 70
+            ? "High"
+            : diseaseScores[disease] >= 50
+            ? "Medium"
+            : "Low",
         supportingSymptoms: selectedSymptoms
           .filter((id) => {
             const symptom = symptoms.find((s) => s.id === id);
             return (
               symptom &&
-              malariaSymptoms.some((ms) =>
-                symptom.symptom_name.toLowerCase().includes(ms)
+              diseasePatterns[disease].symptoms.some((patternSymptom) =>
+                symptom.symptom_name.toLowerCase().includes(patternSymptom)
               )
             );
           })
           .map((id) => symptoms.find((s) => s.id === id).symptom_name),
-      });
-    }
+        severity:
+          diseaseScores[disease] >= 70
+            ? "severe"
+            : diseaseScores[disease] >= 50
+            ? "moderate"
+            : "mild",
+      }))
+      .sort((a, b) => b.probability - a.probability);
 
-    if (typhoidProbability >= 60) {
-      differentials.push({
-        disease: "Typhoid Fever",
-        probability: typhoidProbability,
-        icd10: "A01.0",
-        confidence: "High",
-        supportingSymptoms: selectedSymptoms
-          .filter((id) => {
-            const symptom = symptoms.find((s) => s.id === id);
-            return (
-              symptom &&
-              typhoidSymptoms.some((ts) =>
-                symptom.symptom_name.toLowerCase().includes(ts)
-              )
-            );
-          })
-          .map((id) => symptoms.find((s) => s.id === id).symptom_name),
-      });
-    }
-
-    // Add other possible diagnoses based on symptoms
-    if (
-      selectedSymptoms.some((id) => {
+    // If no specific diagnosis found, suggest general diagnosis
+    if (differentials.length === 0) {
+      const hasFever = selectedSymptoms.some((id) => {
         const symptom = symptoms.find((s) => s.id === id);
         return symptom && symptom.symptom_name.toLowerCase().includes("fever");
-      })
-    ) {
-      differentials.push({
-        disease: "Acute Febrile Illness",
-        probability: 40,
-        icd10: "R50.9",
-        confidence: "Medium",
-        supportingSymptoms: ["Fever"],
       });
+
+      if (hasFever) {
+        differentials.push({
+          disease: "Acute Febrile Illness",
+          probability: 60,
+          icd10: "R50.9",
+          confidence: "Medium",
+          supportingSymptoms: ["Fever"],
+          severity: "mild",
+        });
+      } else {
+        differentials.push({
+          disease: "General Medical Condition",
+          probability: 50,
+          icd10: "R69",
+          confidence: "Low",
+          supportingSymptoms: selectedSymptoms.map(
+            (id) => symptoms.find((s) => s.id === id).symptom_name
+          ),
+          severity: "mild",
+        });
+      }
     }
 
     setDiagnosisResults({
-      malariaProbability: Math.round(malariaProbability),
-      typhoidProbability: Math.round(typhoidProbability),
-      requiresChestXray: hasVeryStrongSigns,
-      differentialDiagnoses: differentials.sort(
-        (a, b) => b.probability - a.probability
-      ),
+      differentialDiagnoses: differentials,
+      requiresChestXray:
+        differentials.some((d) => d.disease === "Pneumonia") ||
+        selectedSymptoms.some((id) => {
+          const symptom = symptoms.find((s) => s.id === id);
+          return (
+            symptom && symptom.symptom_name.toLowerCase().includes("chest pain")
+          );
+        }),
     });
 
     setDifferentialDiagnoses(differentials);
@@ -489,13 +559,24 @@ const DoctorDiagnosis = () => {
         });
       }
 
-      // Save treatment plan
-      if (
-        treatmentPlan.medications.length > 0 ||
-        treatmentPlan.procedures.length > 0
-      ) {
-        // This would be expanded to save actual treatment plan
-        console.log("Treatment plan to be saved:", treatmentPlan);
+      // Save treatment plan and prescriptions
+      if (treatmentPlan.medications.length > 0) {
+        for (const medication of treatmentPlan.medications) {
+          if (medication.medication_id && medication.dosage) {
+            // Save prescription
+            await supabase.from("prescriptions").insert({
+              diagnosis_id: diagnosis.id,
+              patient_id: selectedPatient.id,
+              doctor_id: user.id,
+              medication_id: medication.medication_id,
+              dosage: medication.dosage,
+              frequency: medication.frequency,
+              duration: medication.duration,
+              instructions: medication.instructions || "",
+              prescribed_date: new Date().toISOString().split("T")[0],
+            });
+          }
+        }
       }
 
       alert("Diagnosis saved successfully!");
@@ -887,46 +968,6 @@ const DoctorDiagnosis = () => {
 
   const renderDiagnosisResults = () => (
     <div className="space-y-6">
-      {/* Rule-Based Results */}
-      <div className="card-medical">
-        <div className="px-6 py-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Rule-Based Diagnosis Results
-          </h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">
-                {diagnosisResults.malariaProbability}%
-              </div>
-              <div className="text-sm text-blue-800">Malaria Probability</div>
-            </div>
-            <div className="text-center p-4 bg-orange-50 rounded-lg">
-              <div className="text-2xl font-bold text-orange-600">
-                {diagnosisResults.typhoidProbability}%
-              </div>
-              <div className="text-sm text-orange-800">Typhoid Probability</div>
-            </div>
-          </div>
-
-          {diagnosisResults.requiresChestXray && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center">
-                <XCircleIcon className="h-5 w-5 text-yellow-600 mr-2" />
-                <span className="font-medium text-yellow-800">
-                  Chest X-ray Recommended
-                </span>
-              </div>
-              <p className="text-sm text-yellow-700 mt-1">
-                Very strong signs detected. Recommend chest X-ray in addition to
-                standard treatment.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Differential Diagnosis */}
       <div className="card-medical">
         <div className="px-6 py-4 border-b">
@@ -942,7 +983,7 @@ const DoctorDiagnosis = () => {
                 key={index}
                 className={`border rounded-lg p-4 cursor-pointer transition-all ${
                   finalDiagnosis?.disease === diagnosis.disease
-                    ? "border-blue-500 bg-blue-50"
+                    ? "border-blue-500 bg-blue-50 ring-2 ring-blue-300"
                     : "border-gray-200 hover:border-blue-300"
                 }`}
                 onClick={() => setFinalDiagnosis(diagnosis)}
@@ -961,7 +1002,7 @@ const DoctorDiagnosis = () => {
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-bold text-blue-600">
-                      {diagnosis.probability}%
+                      {Math.round(diagnosis.probability)}%
                     </div>
                     <div
                       className={`text-xs px-2 py-1 rounded ${
@@ -1022,9 +1063,11 @@ const DoctorDiagnosis = () => {
             <button
               onClick={() => setActiveTab("treatment")}
               disabled={!finalDiagnosis}
-              className="btn-primary"
+              className={`btn-primary ${
+                !finalDiagnosis ? "opacity-50 cursor-not-allowed" : ""
+              }`}
             >
-              Continue to fn
+              Continue to Treatment Plan
             </button>
           </div>
         </div>
@@ -1071,6 +1114,27 @@ const DoctorDiagnosis = () => {
                   </p>
                 </div>
               )}
+              {finalDiagnosis.disease === "Influenza" && (
+                <div>
+                  <p className="text-sm text-blue-800">
+                    <strong>Treatment:</strong> Oseltamivir (Tamiflu), rest, and
+                    hydration
+                  </p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    <strong>Duration:</strong> 5 days
+                  </p>
+                </div>
+              )}
+              {finalDiagnosis.disease === "Pneumonia" && (
+                <div>
+                  <p className="text-sm text-blue-800">
+                    <strong>Treatment:</strong> Amoxicillin or Azithromycin
+                  </p>
+                  <p className="text-sm text-blue-700 mt-1">
+                    <strong>Duration:</strong> 5-7 days
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1080,13 +1144,130 @@ const DoctorDiagnosis = () => {
             <h4 className="font-medium text-gray-900 mb-3">Medications</h4>
             <div className="space-y-3">
               {treatmentPlan.medications.map((med, index) => (
-                <div
-                  key={index}
-                  className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
-                >
-                  <span className="flex-1">
-                    {med.name} - {med.dosage}
-                  </span>
+                <div key={index} className="border rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Medication
+                      </label>
+                      <select
+                        value={med.medication_id || ""}
+                        onChange={(e) => {
+                          const newMeds = [...treatmentPlan.medications];
+                          newMeds[index].medication_id = e.target.value;
+                          const selectedMed = medications.find(
+                            (m) => m.id === e.target.value
+                          );
+                          if (selectedMed) {
+                            newMeds[index].name = selectedMed.medication_name;
+                            newMeds[index].strength = selectedMed.strength;
+                            newMeds[index].dosage_form =
+                              selectedMed.dosage_form;
+                          }
+                          setTreatmentPlan((prev) => ({
+                            ...prev,
+                            medications: newMeds,
+                          }));
+                        }}
+                        className="input-medical"
+                      >
+                        <option value="">Select medication</option>
+                        {medications.map((medication) => (
+                          <option key={medication.id} value={medication.id}>
+                            {medication.medication_name} - {medication.strength}{" "}
+                            ({medication.dosage_form})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Dosage
+                      </label>
+                      <input
+                        type="text"
+                        value={med.dosage || ""}
+                        onChange={(e) => {
+                          const newMeds = [...treatmentPlan.medications];
+                          newMeds[index].dosage = e.target.value;
+                          setTreatmentPlan((prev) => ({
+                            ...prev,
+                            medications: newMeds,
+                          }));
+                        }}
+                        className="input-medical"
+                        placeholder="e.g., 500mg"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Frequency
+                      </label>
+                      <select
+                        value={med.frequency || ""}
+                        onChange={(e) => {
+                          const newMeds = [...treatmentPlan.medications];
+                          newMeds[index].frequency = e.target.value;
+                          setTreatmentPlan((prev) => ({
+                            ...prev,
+                            medications: newMeds,
+                          }));
+                        }}
+                        className="input-medical"
+                      >
+                        <option value="">Select frequency</option>
+                        <option value="Once daily">Once daily</option>
+                        <option value="Twice daily">Twice daily</option>
+                        <option value="Three times daily">
+                          Three times daily
+                        </option>
+                        <option value="Four times daily">
+                          Four times daily
+                        </option>
+                        <option value="As needed">As needed</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Duration
+                      </label>
+                      <input
+                        type="text"
+                        value={med.duration || ""}
+                        onChange={(e) => {
+                          const newMeds = [...treatmentPlan.medications];
+                          newMeds[index].duration = e.target.value;
+                          setTreatmentPlan((prev) => ({
+                            ...prev,
+                            medications: newMeds,
+                          }));
+                        }}
+                        className="input-medical"
+                        placeholder="e.g., 7 days"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Instructions
+                    </label>
+                    <input
+                      type="text"
+                      value={med.instructions || ""}
+                      onChange={(e) => {
+                        const newMeds = [...treatmentPlan.medications];
+                        newMeds[index].instructions = e.target.value;
+                        setTreatmentPlan((prev) => ({
+                          ...prev,
+                          medications: newMeds,
+                        }));
+                      }}
+                      className="input-medical"
+                      placeholder="e.g., Take with food"
+                    />
+                  </div>
                   <button
                     onClick={() =>
                       setTreatmentPlan((prev) => ({
@@ -1096,9 +1277,9 @@ const DoctorDiagnosis = () => {
                         ),
                       }))
                     }
-                    className="text-red-600 hover:text-red-800"
+                    className="mt-2 text-red-600 hover:text-red-800 text-sm"
                   >
-                    Remove
+                    Remove Medication
                   </button>
                 </div>
               ))}
@@ -1108,7 +1289,14 @@ const DoctorDiagnosis = () => {
                     ...prev,
                     medications: [
                       ...prev.medications,
-                      { name: "", dosage: "", frequency: "" },
+                      {
+                        medication_id: "",
+                        name: "",
+                        dosage: "",
+                        frequency: "",
+                        duration: "",
+                        instructions: "",
+                      },
                     ],
                   }))
                 }
