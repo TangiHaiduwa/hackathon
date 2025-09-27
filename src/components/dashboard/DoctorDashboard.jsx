@@ -1,8 +1,7 @@
-// DoctorDashboard.jsx (Updated for Text Overflow Fix)
+// DoctorDashboard.jsx (Improved Version)
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/layout/DashboardLayout";
-
 import supabase from "../../lib/supabase";
 import {
   HomeIcon,
@@ -67,50 +66,46 @@ const DoctorDashboard = () => {
     },
     { name: "Reporting", href: "/doctor-reporting", icon: ChartBarIcon },
     { name: "Search", href: "/doctor-search", icon: MagnifyingGlassIcon },
-    {
-      name: "Decision Support",
-      href: "/doctor-decision-support",
-      icon: LightBulbIcon,
-    },
+    // { name: 'Decision Support', href: '/doctor-decision-support', icon: LightBulbIcon },
     // { name: 'Resources', href: '/doctor-resources', icon: AcademicCapIcon },
   ];
 
-  // Status configurations with better styling and shorter labels
+  // Status configurations with better styling
   const statusConfigs = {
     confirmed: {
       label: "Confirmed",
-      shortLabel: "Confirmed",
       className: "bg-green-100 text-green-800 border-green-200",
+      fullLabel: "Confirmed",
     },
     pending: {
       label: "Pending",
-      shortLabel: "Pending",
       className: "bg-yellow-100 text-yellow-800 border-yellow-200",
+      fullLabel: "Pending",
     },
     scheduled: {
       label: "Scheduled",
-      shortLabel: "Scheduled",
       className: "bg-blue-100 text-blue-800 border-blue-200",
+      fullLabel: "Scheduled",
     },
     cancelled: {
       label: "Cancelled",
-      shortLabel: "Cancelled",
       className: "bg-red-100 text-red-800 border-red-200",
+      fullLabel: "Cancelled",
     },
     severe: {
       label: "Severe",
-      shortLabel: "Severe",
       className: "bg-red-100 text-red-800 border-red-200",
+      fullLabel: "Severe",
     },
     moderate: {
       label: "Moderate",
-      shortLabel: "Moderate",
       className: "bg-orange-100 text-orange-800 border-orange-200",
+      fullLabel: "Moderate",
     },
     mild: {
       label: "Mild",
-      shortLabel: "Mild",
       className: "bg-green-100 text-green-800 border-green-200",
+      fullLabel: "Mild",
     },
   };
 
@@ -221,39 +216,72 @@ const DoctorDashboard = () => {
     try {
       const today = new Date().toISOString().split("T")[0];
 
-      // First, get assigned patient IDs
-      const { data: assignedPatients, error: assignError } = await supabase
-        .from("doctor_patient_assignments")
-        .select("patient_id")
-        .eq("doctor_id", doctorId)
-        .eq("is_active", true);
-
-      if (assignError) console.error("Assignment error:", assignError);
-
-      const patientIds = assignedPatients?.map((p) => p.patient_id) || [];
-
-      if (patientIds.length === 0) {
-        setStats({
-          todaysAppointments: 0,
-          activePatients: 0,
-          pendingDiagnoses: 0,
-          urgentCases: 0,
-          prescriptionsPending: 0,
-        });
-        return;
-      }
-
       // Today's appointments count
       const { count: appointmentsCount, error: apptError } = await supabase
         .from("appointments")
         .select("*", { count: "exact", head: true })
-        .eq("appointment_date", today)
-        .in("patient_id", patientIds);
+        .eq("doctor_id", doctorId)
+        .eq("appointment_date", today);
 
       if (apptError) console.error("Appointment count error:", apptError);
 
-      // ... rest of your existing stats logic
-      // [Keep the rest of your existing code for activePatients, pendingDiagnoses, etc.]
+      // Active patients (patients with appointments or diagnoses in last 30 days)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      const { data: recentAppointments } = await supabase
+        .from("appointments")
+        .select("patient_id")
+        .eq("doctor_id", doctorId)
+        .gte("appointment_date", thirtyDaysAgo);
+
+      const { data: recentDiagnoses } = await supabase
+        .from("medical_diagnoses")
+        .select("patient_id")
+        .eq("doctor_id", doctorId)
+        .gte("diagnosis_date", thirtyDaysAgo);
+
+      const allPatientIds = [
+        ...(recentAppointments?.map((apt) => apt.patient_id) || []),
+        ...(recentDiagnoses?.map((diag) => diag.patient_id) || []),
+      ];
+      const uniquePatientIds = [...new Set(allPatientIds)];
+      const activePatientsCount = uniquePatientIds.length;
+
+      // Pending diagnoses
+      const { count: pendingDiagnosesCount, error: diagError } = await supabase
+        .from("medical_diagnoses")
+        .select("*", { count: "exact", head: true })
+        .eq("doctor_id", doctorId);
+
+      if (diagError) console.error("Diagnosis count error:", diagError);
+
+      // Urgent cases
+      const { count: urgentCasesCount, error: urgentError } = await supabase
+        .from("medical_diagnoses")
+        .select("*", { count: "exact", head: true })
+        .eq("doctor_id", doctorId)
+        .eq("severity", "severe");
+
+      if (urgentError) console.error("Urgent cases error:", urgentError);
+
+      // Pending prescriptions
+      const { count: prescriptionsPendingCount, error: presError } =
+        await supabase
+          .from("prescriptions")
+          .select("*", { count: "exact", head: true })
+          .eq("doctor_id", doctorId);
+
+      if (presError) console.error("Prescription count error:", presError);
+
+      setStats({
+        todaysAppointments: appointmentsCount || 0,
+        activePatients: activePatientsCount || 0,
+        pendingDiagnoses: pendingDiagnosesCount || 0,
+        urgentCases: urgentCasesCount || 0,
+        prescriptionsPending: prescriptionsPendingCount || 0,
+      });
     } catch (err) {
       console.error("Error fetching stats:", err);
     }
@@ -261,29 +289,8 @@ const DoctorDashboard = () => {
 
   const fetchTodaysAppointments = async (doctorId) => {
     try {
-      const today = format(addHours(new Date(), 2), "yyyy-MM-dd"); // Adjust for CAT
-      console.log("Fetching appointments for date:", today);
+      const today = new Date().toISOString().split("T")[0];
 
-      // First, get the patient IDs assigned to this doctor
-      const { data: assignedPatients, error: assignError } = await supabase
-        .from("doctor_patient_assignments")
-        .select("patient_id")
-        .eq("doctor_id", doctorId)
-        .eq("is_active", true);
-
-      console.log("Assigned Patients:", assignedPatients);
-      if (assignError) throw assignError;
-
-      if (!assignedPatients || assignedPatients.length === 0) {
-        console.log("No assigned patients found");
-        setTodayAppointments([]);
-        return;
-      }
-
-      const patientIds = assignedPatients.map((p) => p.patient_id);
-      console.log("Patient IDs:", patientIds);
-
-      // Then, get today's appointments for these patients
       const { data: appointments, error } = await supabase
         .from("appointments")
         .select(
@@ -296,29 +303,25 @@ const DoctorDashboard = () => {
         patient_id
       `
         )
+        .eq("doctor_id", doctorId)
         .eq("appointment_date", today)
-        .in("patient_id", patientIds)
         .order("appointment_time", { ascending: true })
         .limit(5);
 
-      console.log("Appointments:", appointments);
       if (error) throw error;
 
       if (!appointments || appointments.length === 0) {
-        console.log("No appointments found for today");
         setTodayAppointments([]);
         return;
       }
 
-      // Get patient details
-      const appointmentPatientIds = appointments.map((apt) => apt.patient_id);
-      console.log("Appointment Patient IDs:", appointmentPatientIds);
+      const patientIds = appointments.map((apt) => apt.patient_id);
+
       const { data: patients, error: patientsError } = await supabase
         .from("users")
         .select("id, first_name, last_name")
-        .in("id", appointmentPatientIds);
+        .in("id", patientIds);
 
-      console.log("Patients:", patients);
       if (patientsError) throw patientsError;
 
       const appointmentsWithPatientNames = appointments.map((apt) => {
@@ -339,11 +342,9 @@ const DoctorDashboard = () => {
         };
       });
 
-      console.log("Formatted Appointments:", appointmentsWithPatientNames);
       setTodayAppointments(appointmentsWithPatientNames);
     } catch (err) {
-      console.error("Error fetching appointments:", err.message, err.details);
-      setTodayAppointments([]);
+      console.error("Error fetching appointments:", err);
     }
   };
 
@@ -360,14 +361,7 @@ const DoctorDashboard = () => {
         severity
       `
         )
-        .in(
-          "patient_id",
-          supabase
-            .from("doctor_patient_assignments")
-            .select("patient_id")
-            .eq("doctor_id", doctorId)
-            .eq("is_active", true)
-        )
+        .eq("doctor_id", doctorId)
         .order("diagnosis_date", { ascending: false })
         .limit(4);
 
@@ -428,14 +422,7 @@ const DoctorDashboard = () => {
         notes
       `
         )
-        .in(
-          "patient_id",
-          supabase
-            .from("doctor_patient_assignments")
-            .select("patient_id")
-            .eq("doctor_id", doctorId)
-            .eq("is_active", true)
-        )
+        .eq("doctor_id", doctorId)
         .eq("severity", "severe")
         .order("diagnosis_date", { ascending: false })
         .limit(3);
@@ -476,21 +463,19 @@ const DoctorDashboard = () => {
     }
   };
 
-  // Status Badge Component
+  // Improved Status Badge Component
   const StatusBadge = ({ status, type = "default" }) => {
     const config =
       statusConfigs[status.toLowerCase()] ||
       (type === "severity" ? statusConfigs.mild : statusConfigs.pending);
 
     return (
-      <div className="flex-shrink-0 ml-3">
-        <span
-          className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium border max-w-full truncate ${config.className}`}
-          title={config.label}
-        >
-          {config.shortLabel}
-        </span>
-      </div>
+      <span
+        className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium border whitespace-nowrap ${config.className}`}
+        title={config.fullLabel}
+      >
+        {config.fullLabel}
+      </span>
     );
   };
 
@@ -540,10 +525,10 @@ const DoctorDashboard = () => {
               {user?.specialization} • {user?.department}
             </p>
             <div className="flex flex-wrap items-center gap-3 mt-3">
-              <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200 max-w-xs truncate">
+              <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
                 License: {user?.licenseNumber}
               </span>
-              <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full max-w-xs truncate">
+              <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
                 {user?.email}
               </span>
             </div>
@@ -575,7 +560,9 @@ const DoctorDashboard = () => {
               <CalendarIcon className="h-6 w-6 text-blue-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Appointments</p>
+              <p className="text-sm font-medium text-gray-600">
+                Today's Appointments
+              </p>
               <p className="text-2xl font-bold text-gray-900">
                 {stats.todaysAppointments}
               </p>
@@ -635,7 +622,9 @@ const DoctorDashboard = () => {
               <DocumentTextIcon className="h-6 w-6 text-purple-600" />
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Prescription</p>
+              <p className="text-sm font-medium text-gray-600">
+                Pending Prescriptions
+              </p>
               <p className="text-2xl font-bold text-gray-900">
                 {stats.prescriptionsPending}
               </p>
@@ -662,15 +651,15 @@ const DoctorDashboard = () => {
                       className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition duration-200"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 truncate max-w-xs">
+                        <p className="font-medium text-gray-900 truncate">
                           {appointment.patientName}
                         </p>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-1 text-sm text-gray-600">
+                        <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
                           <span>Time: {appointment.time}</span>
                           {appointment.reason && (
                             <>
-                              <span className="hidden sm:inline">•</span>
-                              <span className="truncate max-w-xs">
+                              <span>•</span>
+                              <span className="truncate">
                                 Reason: {appointment.reason}
                               </span>
                             </>
@@ -691,7 +680,7 @@ const DoctorDashboard = () => {
                     onClick={() => navigate("/doctor-appointments")}
                     className="btn-primary mt-2"
                   >
-                    View Appointments
+                    Schedule Appointments
                   </button>
                 </div>
               )}
@@ -719,17 +708,15 @@ const DoctorDashboard = () => {
                       }
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 truncate max-w-xs">
+                        <p className="font-medium text-gray-900 truncate">
                           {patient.name}
                         </p>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 mt-1 text-sm text-gray-600">
+                        <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
                           <span>Age: {patient.age}</span>
-                          <span className="hidden sm:inline">•</span>
-                          <span className="truncate max-w-xs">
-                            Last Visit: {patient.lastVisit}
-                          </span>
-                          <span className="hidden sm:inline">•</span>
-                          <span className="truncate max-w-xs">
+                          <span>•</span>
+                          <span>Last Visit: {patient.lastVisit}</span>
+                          <span>•</span>
+                          <span className="truncate">
                             Condition: {patient.condition}
                           </span>
                         </div>
@@ -766,17 +753,17 @@ const DoctorDashboard = () => {
                       key={urgentCase.id}
                       className="p-4 border border-red-200 rounded-lg bg-red-50"
                     >
-                      <p className="font-medium text-red-900 truncate max-w-xs">
+                      <p className="font-medium text-red-900 truncate">
                         {urgentCase.patientName}
                       </p>
-                      <p className="text-sm text-red-700 mt-1 truncate max-w-xs">
+                      <p className="text-sm text-red-700 mt-1">
                         {urgentCase.condition}
                       </p>
-                      <p className="text-xs text-red-600 mt-2 truncate max-w-xs">
+                      <p className="text-xs text-red-600 mt-2">
                         Diagnosed: {urgentCase.date}
                       </p>
                       {urgentCase.notes && (
-                        <p className="text-xs text-red-500 mt-1 truncate max-w-xs">
+                        <p className="text-xs text-red-500 mt-1 truncate">
                           Notes: {urgentCase.notes}
                         </p>
                       )}
