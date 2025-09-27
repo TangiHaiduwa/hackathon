@@ -151,24 +151,24 @@ const DoctorSearch = () => {
   };
 
   const searchPatients = async () => {
-    const { data, error } = await supabase
+    // Split search query into individual words
+    const searchTerms = searchQuery.trim().split(/\s+/);
+
+    let query = supabase
       .from("users")
       .select(
         `
-        id,
-        first_name,
-        last_name,
-        email,
-        phone_number,
-        date_of_birth,
-        patients (
-          blood_type_id (blood_type_code),
-          emergency_contact_name
-        )
-      `
+      id,
+      first_name,
+      last_name,
+      email,
+      phone_number,
+      date_of_birth,
+      patients (
+        blood_type_id (blood_type_code),
+        emergency_contact_name
       )
-      .or(
-        `first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`
+    `
       )
       .eq(
         "role_id",
@@ -181,6 +181,28 @@ const DoctorSearch = () => {
         ).data?.id
       )
       .limit(50);
+
+    // If multiple search terms, search for combinations
+    if (searchTerms.length > 1) {
+      // Build OR conditions for different name combinations
+      const orConditions = searchTerms
+        .map((term) => `first_name.ilike.%${term}%,last_name.ilike.%${term}%`)
+        .join(",");
+
+      // Add exact full name match as highest priority
+      const fullNameMatch = `first_name.ilike.%${searchTerms[0]}%,last_name.ilike.%${searchTerms[1]}%`;
+
+      query = query.or(
+        `${fullNameMatch},${orConditions},email.ilike.%${searchQuery}%`
+      );
+    } else {
+      // Single term search
+      query = query.or(
+        `first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`
+      );
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
