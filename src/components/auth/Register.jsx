@@ -176,9 +176,10 @@ const Register = () => {
       const result = await signUp(formData);
       
       if (result.success) {
-        navigate('/dashboard', { 
+        // Redirect to login page with success message
+        navigate('/login', { 
           state: { 
-            message: 'Registration successful! Please check your email for verification.',
+            message: 'Registration successful! Please check your email for verification and then login.',
             type: 'success'
           }
         });
@@ -219,10 +220,10 @@ const Register = () => {
   const renderConnectionStatus = () => {
     if (supabaseStatus === 'checking') {
       return (
-        <div className="mx-8 mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-4 sm:mt-6 bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4">
           <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
-            <span className="text-blue-700 text-sm font-medium">Verifying system connection...</span>
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2 sm:mr-3"></div>
+            <span className="text-blue-700 text-xs sm:text-sm font-medium">Verifying system connection...</span>
           </div>
         </div>
       );
@@ -230,10 +231,10 @@ const Register = () => {
 
     if (supabaseStatus === 'error') {
       return (
-        <div className="mx-8 mt-6 bg-red-50 border border-red-200 rounded-xl p-4">
+        <div className="mx-4 sm:mx-6 lg:mx-8 mt-4 sm:mt-6 bg-red-50 border border-red-200 rounded-xl p-3 sm:p-4">
           <div className="flex items-center">
-            <ExclamationTriangleIcon className="h-5 w-5 text-red-600 mr-3" />
-            <span className="text-red-700 text-sm font-medium">
+            <ExclamationTriangleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 mr-2 sm:mr-3" />
+            <span className="text-red-700 text-xs sm:text-sm font-medium">
               System temporarily unavailable. Please try again later.
             </span>
           </div>
@@ -247,26 +248,26 @@ const Register = () => {
   // Don't render form if connection check failed
   if (supabaseStatus === 'error') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-          <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-8 text-center">
-            <ExclamationTriangleIcon className="h-16 w-16 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold">System Unavailable</h2>
+          <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-6 sm:p-8 text-center">
+            <ExclamationTriangleIcon className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-4" />
+            <h2 className="text-xl sm:text-2xl font-bold">System Unavailable</h2>
           </div>
-          <div className="p-8 text-center">
-            <p className="text-gray-700 mb-6">
+          <div className="p-6 sm:p-8 text-center">
+            <p className="text-gray-700 text-sm sm:text-base mb-6">
               We're experiencing technical difficulties. Please try again in a few moments.
             </p>
             <div className="space-y-3">
               <button
                 onClick={() => window.location.reload()}
-                className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
+                className="w-full bg-blue-600 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium text-sm sm:text-base"
               >
                 Retry Connection
               </button>
               <Link 
                 to="/"
-                className="block w-full border border-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-50 transition duration-200 font-medium"
+                className="block w-full border border-gray-300 text-gray-700 px-4 py-2 sm:px-6 sm:py-3 rounded-lg hover:bg-gray-50 transition duration-200 font-medium text-sm sm:text-base"
               >
                 Return Home
               </Link>
@@ -278,33 +279,33 @@ const Register = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl lg:max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden mx-2 sm:mx-4">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="bg-white/20 p-3 rounded-2xl">
-                <UserCircleIcon className="h-10 w-10 text-white" />
+        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4 sm:p-6 lg:p-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              <div className="bg-white/20 p-2 sm:p-3 rounded-2xl">
+                <UserCircleIcon className="h-6 w-6 sm:h-8 sm:w-8 lg:h-10 lg:w-10 text-white" />
               </div>
               <div>
                 <div className="flex items-baseline">
-                  <span className="text-3xl font-bold">MESMTF</span>
-                  <span className="text-2xl font-light text-blue-200 ml-1">Pro</span>
+                  <span className="text-xl sm:text-2xl lg:text-3xl font-bold">MESMTF</span>
+                  <span className="text-lg sm:text-xl lg:text-2xl font-light text-blue-200 ml-1">Pro</span>
                 </div>
-                <p className="text-blue-100 text-sm">Ministry of Health & Social Services</p>
+                <p className="text-blue-100 text-xs sm:text-sm">Ministry of Health & Social Services</p>
               </div>
             </div>
-            <div className="text-right">
-              <div className="bg-white/20 px-3 py-1 rounded-full text-sm">
+            <div className="text-center sm:text-right">
+              <div className="bg-white/20 px-2 py-1 sm:px-3 sm:py-1 rounded-full text-xs sm:text-sm">
                 Step {currentStep} of 3
               </div>
             </div>
           </div>
           
-          <div className="mt-6 text-center">
-            <h2 className="text-2xl font-bold">Patient Registration</h2>
-            <p className="mt-2 opacity-90">
+          <div className="mt-4 sm:mt-6 text-center">
+            <h2 className="text-lg sm:text-xl lg:text-2xl font-bold">Patient Registration</h2>
+            <p className="mt-1 sm:mt-2 opacity-90 text-sm sm:text-base">
               Create your secure patient account in three simple steps
             </p>
           </div>
@@ -315,20 +316,20 @@ const Register = () => {
 
         {/* Error Message */}
         {error && supabaseStatus === 'connected' && (
-          <div className="mx-8 mt-6 bg-red-50 border-l-4 border-red-500 rounded-lg p-4">
+          <div className="mx-4 sm:mx-6 lg:mx-8 mt-4 sm:mt-6 bg-red-50 border-l-4 border-red-500 rounded-lg p-3 sm:p-4">
             <div className="flex items-center">
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-500 mr-3" />
-              <p className="text-red-700 font-medium">{error}</p>
+              <ExclamationTriangleIcon className="h-4 w-4 sm:h-5 sm:w-5 text-red-500 mr-2 sm:mr-3" />
+              <p className="text-red-700 font-medium text-sm sm:text-base">{error}</p>
             </div>
           </div>
         )}
 
         {/* Progress Steps */}
-        <div className="px-8 pt-8">
+        <div className="px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 lg:pt-8">
           <div className="flex items-center justify-between mb-2">
             {['Personal Info', 'Contact Details', 'Account Setup'].map((label, index) => (
               <div key={index} className="flex flex-col items-center flex-1">
-                <div className={`flex items-center justify-center w-12 h-12 rounded-full border-2 ${
+                <div className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-full border-2 ${
                   currentStep > index + 1 
                     ? 'bg-green-500 border-green-500 text-white' 
                     : currentStep === index + 1
@@ -336,12 +337,12 @@ const Register = () => {
                     : 'bg-white border-gray-300 text-gray-400'
                 } transition-all duration-300`}>
                   {currentStep > index + 1 ? (
-                    <CheckCircleIcon className="h-6 w-6" />
+                    <CheckCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
                   ) : (
-                    <span className="font-semibold">{index + 1}</span>
+                    <span className="font-semibold text-sm sm:text-base">{index + 1}</span>
                   )}
                 </div>
-                <span className={`mt-2 text-sm font-medium ${
+                <span className={`mt-1 sm:mt-2 text-xs sm:text-sm font-medium text-center ${
                   currentStep >= index + 1 ? 'text-blue-600' : 'text-gray-400'
                 }`}>
                   {label}
@@ -351,7 +352,7 @@ const Register = () => {
           </div>
           
           {/* Progress Bar */}
-          <div className="relative mb-8">
+          <div className="relative mb-4 sm:mb-6 lg:mb-8">
             <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 transform -translate-y-1/2"></div>
             <div 
               className="absolute top-1/2 left-0 h-1 bg-blue-600 transform -translate-y-1/2 transition-all duration-500"
@@ -361,24 +362,24 @@ const Register = () => {
         </div>
 
         {/* Registration Form */}
-        <form className="px-8 pb-8 space-y-8" onSubmit={handleSubmit}>
+        <form className="px-4 sm:px-6 lg:px-8 pb-4 sm:pb-6 lg:pb-8 space-y-4 sm:space-y-6 lg:space-y-8" onSubmit={handleSubmit}>
           {/* Step 1: Personal Information */}
           {currentStep === 1 && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="bg-blue-50 rounded-xl p-4">
-                <h3 className="text-lg font-semibold text-blue-900 flex items-center">
-                  <UserCircleIcon className="h-5 w-5 mr-2" />
+            <div className="space-y-4 sm:space-y-6 animate-fade-in">
+              <div className="bg-blue-50 rounded-xl p-3 sm:p-4">
+                <h3 className="text-base sm:text-lg font-semibold text-blue-900 flex items-center">
+                  <UserCircleIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                   Personal Information
                 </h3>
-                <p className="text-blue-700 text-sm mt-1">
+                <p className="text-blue-700 text-xs sm:text-sm mt-1">
                   Please provide your basic personal details
                 </p>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <UserCircleIcon className="h-4 w-4 mr-1 text-gray-400" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+                <div className="sm:col-span-2 lg:col-span-1">
+                  <label htmlFor="firstName" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2 flex items-center">
+                    <UserCircleIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-400" />
                     First Name *
                   </label>
                   <input
@@ -388,13 +389,13 @@ const Register = () => {
                     required
                     value={formData.firstName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                     placeholder="Enter your first name"
                   />
                 </div>
                 
-                <div>
-                  <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="sm:col-span-2 lg:col-span-1">
+                  <label htmlFor="lastName" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     Last Name *
                   </label>
                   <input
@@ -404,14 +405,14 @@ const Register = () => {
                     required
                     value={formData.lastName}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                     placeholder="Enter your last name"
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <CalendarIcon className="h-4 w-4 mr-1 text-gray-400" />
+                <div className="sm:col-span-2 lg:col-span-1">
+                  <label htmlFor="dateOfBirth" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2 flex items-center">
+                    <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-400" />
                     Date of Birth *
                   </label>
                   <input
@@ -421,13 +422,13 @@ const Register = () => {
                     required
                     value={formData.dateOfBirth}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                     max={new Date().toISOString().split('T')[0]}
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="sm:col-span-2 lg:col-span-1">
+                  <label htmlFor="gender" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     Gender *
                   </label>
                   <select
@@ -436,7 +437,7 @@ const Register = () => {
                     required
                     value={formData.gender}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                   >
                     <option value="">Select gender</option>
                     <option value="male">Male</option>
@@ -446,9 +447,9 @@ const Register = () => {
                   </select>
                 </div>
 
-                <div className="md:col-span-2">
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <PhoneIcon className="h-4 w-4 mr-1 text-gray-400" />
+                <div className="sm:col-span-2">
+                  <label htmlFor="phone" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2 flex items-center">
+                    <PhoneIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-400" />
                     Phone Number *
                   </label>
                   <input
@@ -458,20 +459,20 @@ const Register = () => {
                     required
                     value={formData.phone}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                     placeholder="e.g., 264812345678"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end pt-4">
+              <div className="flex justify-end pt-2 sm:pt-4">
                 <button
                   type="button"
                   onClick={nextStep}
-                  className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center"
+                  className="bg-blue-600 text-white px-4 py-2 sm:px-6 sm:py-3 lg:px-8 lg:py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center text-sm sm:text-base"
                 >
                   Continue to Contact Details
-                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
@@ -481,20 +482,20 @@ const Register = () => {
 
           {/* Step 2: Contact Details */}
           {currentStep === 2 && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="bg-blue-50 rounded-xl p-4">
-                <h3 className="text-lg font-semibold text-blue-900 flex items-center">
-                  <EnvelopeIcon className="h-5 w-5 mr-2" />
+            <div className="space-y-4 sm:space-y-6 animate-fade-in">
+              <div className="bg-blue-50 rounded-xl p-3 sm:p-4">
+                <h3 className="text-base sm:text-lg font-semibold text-blue-900 flex items-center">
+                  <EnvelopeIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                   Contact Details
                 </h3>
-                <p className="text-blue-700 text-sm mt-1">
+                <p className="text-blue-700 text-xs sm:text-sm mt-1">
                   How we can contact you for appointments and updates
                 </p>
               </div>
               
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                  <EnvelopeIcon className="h-4 w-4 mr-1 text-gray-400" />
+                <label htmlFor="email" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2 flex items-center">
+                  <EnvelopeIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-400" />
                   Email Address *
                 </label>
                 <input
@@ -504,14 +505,14 @@ const Register = () => {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                   placeholder="Enter your email address"
                 />
               </div>
 
               <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                  <MapPinIcon className="h-4 w-4 mr-1 text-gray-400" />
+                <label htmlFor="address" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2 flex items-center">
+                  <MapPinIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-400" />
                   Residential Address *
                 </label>
                 <textarea
@@ -521,18 +522,18 @@ const Register = () => {
                   value={formData.address}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                  className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                   placeholder="Enter your complete address including street, city, and postal code"
                 />
               </div>
 
-              <div className="flex justify-between pt-4">
+              <div className="flex justify-between pt-2 sm:pt-4">
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="text-gray-600 px-6 py-3 rounded-lg hover:bg-gray-100 transition duration-200 font-medium border border-gray-300 disabled:opacity-50 flex items-center"
+                  className="text-gray-600 px-4 py-2 sm:px-6 sm:py-3 rounded-lg hover:bg-gray-100 transition duration-200 font-medium border border-gray-300 disabled:opacity-50 flex items-center text-sm sm:text-base"
                 >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                   Back
@@ -540,10 +541,10 @@ const Register = () => {
                 <button
                   type="button"
                   onClick={nextStep}
-                  className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center"
+                  className="bg-blue-600 text-white px-4 py-2 sm:px-6 sm:py-3 lg:px-8 lg:py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center text-sm sm:text-base"
                 >
                   Continue to Account Setup
-                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
@@ -553,21 +554,21 @@ const Register = () => {
 
           {/* Step 3: Account Setup */}
           {currentStep === 3 && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="bg-blue-50 rounded-xl p-4">
-                <h3 className="text-lg font-semibold text-blue-900 flex items-center">
-                  <LockClosedIcon className="h-5 w-5 mr-2" />
+            <div className="space-y-4 sm:space-y-6 animate-fade-in">
+              <div className="bg-blue-50 rounded-xl p-3 sm:p-4">
+                <h3 className="text-base sm:text-lg font-semibold text-blue-900 flex items-center">
+                  <LockClosedIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                   Account Security
                 </h3>
-                <p className="text-blue-700 text-sm mt-1">
+                <p className="text-blue-700 text-xs sm:text-sm mt-1">
                   Create secure credentials for your account
                 </p>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="relative">
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <LockClosedIcon className="h-4 w-4 mr-1 text-gray-400" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+                <div className="relative sm:col-span-2 lg:col-span-1">
+                  <label htmlFor="password" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2 flex items-center">
+                    <LockClosedIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-400" />
                     Password *
                   </label>
                   <input
@@ -577,25 +578,25 @@ const Register = () => {
                     required
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    className="w-full px-3 py-2 sm:px-4 sm:py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                     placeholder="Minimum 8 characters"
                     minLength="8"
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-11 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-8 sm:top-11 text-gray-400 hover:text-gray-600"
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (
-                      <EyeSlashIcon className="h-5 w-5" />
+                      <EyeSlashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                     ) : (
-                      <EyeIcon className="h-5 w-5" />
+                      <EyeIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                     )}
                   </button>
                 </div>
 
-                <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="sm:col-span-2 lg:col-span-1">
+                  <label htmlFor="confirmPassword" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     Confirm Password *
                   </label>
                   <input
@@ -605,16 +606,16 @@ const Register = () => {
                     required
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50"
+                    className="w-full px-3 py-2 sm:px-4 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-gray-50 text-sm sm:text-base"
                     placeholder="Re-enter your password"
                   />
                 </div>
               </div>
 
               {/* Password requirements */}
-              <div className="bg-gray-50 p-4 rounded-lg border">
-                <p className="text-sm font-medium text-gray-700 mb-3">Password Requirements:</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-gray-50 p-3 sm:p-4 rounded-lg border">
+                <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">Password Requirements:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-2 text-xs">
                   <div className={`flex items-center ${formData.password.length >= 8 ? 'text-green-600' : 'text-gray-500'}`}>
                     <div className={`w-2 h-2 rounded-full mr-2 ${formData.password.length >= 8 ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                     At least 8 characters
@@ -635,16 +636,16 @@ const Register = () => {
               </div>
 
               {/* Terms Agreement */}
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="bg-blue-50 p-3 sm:p-4 rounded-lg border border-blue-200">
                 <div className="flex items-start">
                   <input
                     id="terms"
                     name="terms"
                     type="checkbox"
                     required
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1"
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1 flex-shrink-0"
                   />
-                  <label htmlFor="terms" className="ml-3 text-sm text-gray-700">
+                  <label htmlFor="terms" className="ml-3 text-xs sm:text-sm text-gray-700">
                     I agree to the{' '}
                     <a href="#" className="text-blue-600 hover:text-blue-500 font-medium">
                       Terms of Service
@@ -657,13 +658,13 @@ const Register = () => {
                 </div>
               </div>
 
-              <div className="flex justify-between pt-4">
+              <div className="flex justify-between pt-2 sm:pt-4">
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="text-gray-600 px-6 py-3 rounded-lg hover:bg-gray-100 transition duration-200 font-medium border border-gray-300 disabled:opacity-50 flex items-center"
+                  className="text-gray-600 px-4 py-2 sm:px-6 sm:py-3 rounded-lg hover:bg-gray-100 transition duration-200 font-medium border border-gray-300 disabled:opacity-50 flex items-center text-sm sm:text-base"
                 >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 sm:w-4 sm:h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                   Back
@@ -671,16 +672,16 @@ const Register = () => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-8 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center"
+                  className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 sm:px-6 sm:py-3 lg:px-8 lg:py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition duration-200 font-medium shadow-lg hover:shadow-xl disabled:opacity-50 flex items-center text-sm sm:text-base"
                 >
                   {isLoading ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-white mr-2"></div>
                       Creating Account...
                     </>
                   ) : (
                     <>
-                      <ShieldCheckIcon className="h-5 w-5 mr-2" />
+                      <ShieldCheckIcon className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                       Complete Registration
                     </>
                   )}
@@ -691,14 +692,14 @@ const Register = () => {
         </form>
 
         {/* Footer */}
-        <div className="bg-gray-50 px-8 py-6 border-t text-center">
-          <p className="text-sm text-gray-600">
+        <div className="bg-gray-50 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-t text-center">
+          <p className="text-xs sm:text-sm text-gray-600">
             Already have an account?{' '}
             <Link to="/login" className="text-blue-600 hover:text-blue-500 font-medium">
               Sign in to your account
             </Link>
           </p>
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-gray-500 mt-1 sm:mt-2">
             Medical staff members: Please contact your administrator for account setup
           </p>
         </div>
