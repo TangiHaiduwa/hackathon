@@ -55,6 +55,10 @@ import PatientRegistration from "./components/receptionist/PatientRegistration";
 import ReceptionistAppointments from "./components/receptionist/ReceptionistAppointments";
 import Scheduling from "./components/receptionist/Scheduling";
 
+//Patient Routes
+import SymptomChecker from './components/diagnosis/SymptomChecker';
+
+
 // Feature Modules
 import Appointment from "./pages/Appointment";
 import Pharmacy from "./pages/Pharmacy";
@@ -128,6 +132,9 @@ function App() {
             <Route path="/nurse-vitals" element={<Vitals />} />
             <Route path="/patient-rounds" element={<PatientRoundsPage />} />
             <Route path="/medical-records" element={<MedicalRecordsPage />} />
+
+            {/* Symptom Checker */}
+            <Route path="/diagnosis" element={<SymptomChecker />} />
 
             {/* Receptionist Modules */}
             <Route
