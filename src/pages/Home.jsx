@@ -1,7 +1,5 @@
-import React, { Suspense } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, useGLTF, Environment, ContactShadows, Preload } from '@react-three/drei';
 import { 
   HeartIcon, 
   ClockIcon, 
@@ -11,165 +9,13 @@ import {
   ChartBarIcon,
   ArrowRightIcon,
   BuildingLibraryIcon,
-  DocumentChartBarIcon
+  DocumentChartBarIcon,
+  PhoneIcon,
+  EnvelopeIcon,
+  MapPinIcon
 } from '@heroicons/react/24/outline';
 
-// Simple 3D Model Component
-const Model = ({ modelPath, scale = 1 }) => {
-  const { scene } = useGLTF(modelPath);
-  return <primitive object={scene} scale={scale} />;
-};
-
-// Loading component that uses Three.js compatible elements
-const Loader = () => (
-  <mesh>
-    <boxGeometry args={[1, 1, 1]} />
-    <meshStandardMaterial color="#3b82f6" />
-  </mesh>
-);
-
-// Microscope 3D Model with LARGER canvas and BETTER zoom
-const MicroscopeModel = () => (
-  <Canvas 
-    shadows
-    camera={{ position: [4, 3, 6], fov: 40 }}
-    className="h-96 w-full"  // Increased from h-72 to h-96
-  >
-    <Suspense fallback={<Loader />}>
-      <Model modelPath="/models/microscope.glb" scale={1.2} /> {/* Increased scale */}
-
-      <OrbitControls 
-        enableZoom
-        enablePan
-        enableRotate
-        minDistance={0.5}    // Closer zoom
-        maxDistance={20}     // Further zoom out
-        enableDamping
-        dampingFactor={0.05}
-        zoomSpeed={2}        // Faster zoom
-        panSpeed={1.5}       // Faster pan
-        rotateSpeed={1}      // Smoother rotation
-      />
-
-      {/* Enhanced Lights */}
-      <ambientLight intensity={0.6} />
-      <directionalLight 
-        position={[8, 15, 8]} 
-        intensity={1.5} 
-        castShadow 
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-      />
-      <spotLight 
-        position={[-8, 12, -8]} 
-        angle={0.4} 
-        penumbra={0.6} 
-        intensity={1.2} 
-        castShadow 
-      />
-      <hemisphereLight 
-        skyColor="#b1e1ff" 
-        groundColor="#000000" 
-        intensity={0.8} 
-      />
-
-      {/* Enhanced Shadows & Environment */}
-      <ContactShadows 
-        position={[0, -1.5, 0]} 
-        opacity={0.8} 
-        scale={15} 
-        blur={3} 
-        far={6} 
-      />
-      <Environment preset="studio" /> {/* Changed to studio for better medical lighting */}
-
-      <Preload all />
-    </Suspense>
-  </Canvas>
-);
-
-// Operating Room 3D Model with LARGER canvas and BETTER zoom
-const OperatingRoomModel = () => (
-  <Canvas 
-    shadows
-    camera={{ position: [8, 6, 12], fov: 40 }}
-    className="h-96 w-full"  // Increased from h-72 to h-96
-  >
-    <Suspense fallback={<Loader />}>
-      <Model modelPath="/models/operating-room.glb" scale={0.9} /> {/* Increased scale */}
-
-      <OrbitControls 
-        enableZoom
-        enablePan
-        enableRotate
-        minDistance={1}      // Closer zoom
-        maxDistance={30}     // Further zoom out
-        enableDamping
-        dampingFactor={0.05}
-        zoomSpeed={2}        // Faster zoom
-        panSpeed={1.5}       // Faster pan
-        rotateSpeed={1}      // Smoother rotation
-      />
-
-      {/* Enhanced Lights */}
-      <ambientLight intensity={0.6} />
-      <directionalLight 
-        position={[12, 20, 10]} 
-        intensity={1.5} 
-        castShadow 
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-      />
-      <spotLight 
-        position={[-12, 18, -10]} 
-        angle={0.4} 
-        penumbra={0.6} 
-        intensity={1.2} 
-        castShadow 
-      />
-      <hemisphereLight 
-        skyColor="#b1e1ff" 
-        groundColor="#000000" 
-        intensity={0.8} 
-      />
-
-      {/* Enhanced Shadows & Environment */}
-      <ContactShadows 
-        position={[0, -2, 0]} 
-        opacity={0.8} 
-        scale={20} 
-        blur={3} 
-        far={8} 
-      />
-      <Environment preset="studio" /> {/* Changed to studio for better medical lighting */}
-
-      <Preload all />
-    </Suspense>
-  </Canvas>
-);
-
-// External loading indicator (outside Canvas)
-const LoadingIndicator = () => (
-  <div className="h-96 w-full flex items-center justify-center bg-gray-100 rounded-xl"> {/* Increased height */}
-    <div className="text-center">
-      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-800 mx-auto mb-4"></div> {/* Larger spinner */}
-      <p className="text-gray-600 text-lg">Loading 3D model...</p> {/* Larger text */}
-    </div>
-  </div>
-);
-
 const Home = () => {
-  const [modelsLoaded, setModelsLoaded] = React.useState(false);
-
-  React.useEffect(() => {
-    // Simple timeout to show loading state
-    const timer = setTimeout(() => {
-      setModelsLoaded(true);
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Navigation Header */}
@@ -191,7 +37,7 @@ const Home = () => {
             
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-gray-700 hover:text-blue-800 font-medium transition duration-200">Features</a>
-              <a href="#technology" className="text-gray-700 hover:text-blue-800 font-medium transition duration-200">Technology</a>
+              <a href="#benefits" className="text-gray-700 hover:text-blue-800 font-medium transition duration-200">Benefits</a>
               <a href="#contact" className="text-gray-700 hover:text-blue-800 font-medium transition duration-200">Contact</a>
             </div>
             
@@ -208,24 +54,24 @@ const Home = () => {
         </div>
       </nav>
 
-      {/* Hero Section with Microscope - Increased container size */}
-      <section className="relative py-20 px-4 sm:px-6 lg:px-8"> {/* Increased padding */}
+      {/* Hero Section */}
+      <section className="relative py-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center"> {/* Increased gap */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="text-left">
               <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-100 text-blue-800 text-sm font-medium mb-6">
                 <ShieldCheckIcon className="h-4 w-4 mr-2" />
                 Official Government Healthcare Platform
               </div>
               
-              <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight"> {/* Larger text */}
+              <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
                 Advanced Medical Expert System for
                 <span className="text-blue-800 block">Malaria & Typhoid Detection</span>
               </h1>
               
-              <p className="text-xl text-gray-600 mb-8 leading-relaxed"> {/* Larger text */}
+              <p className="text-lg text-gray-600 mb-8 leading-relaxed">
                 A comprehensive e-Health solution featuring AI-powered diagnosis, 
-                secure medical records, and integrated healthcare management.
+                secure medical records, and integrated healthcare management for the Ministry of Health and Social Services.
               </p>
               
               <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -240,13 +86,14 @@ const Home = () => {
               </div>
             </div>
 
-            {/* Microscope 3D Model - Larger container */}
-            <div className="bg-white rounded-2xl shadow-xl p-6"> {/* Increased padding and rounded */}
-              {modelsLoaded ? <MicroscopeModel /> : <LoadingIndicator />}
-              <p className="text-center text-gray-600 mt-4 text-sm">
-                🔍 Drag to rotate • Scroll to zoom • Right-click to pan
-                <br />
-                <span className="text-blue-600 font-medium">Zoom in close to see fine details!</span>
+            {/* Medical Illustration Placeholder */}
+            <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-8 text-white text-center">
+              <div className="bg-white/20 rounded-xl p-6 mb-6">
+                <HeartIcon className="h-20 w-20 mx-auto text-white/90" />
+              </div>
+              <h3 className="text-2xl font-bold mb-4">AI-Powered Healthcare</h3>
+              <p className="text-blue-100">
+                Advanced expert system technology for accurate diagnosis and treatment recommendations
               </p>
             </div>
           </div>
@@ -254,22 +101,22 @@ const Home = () => {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 bg-white">
+      <section id="features" className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">Comprehensive Healthcare Solutions</h2> {/* Larger text */}
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto"> {/* Larger text */}
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Comprehensive Healthcare Solutions</h2>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
               Designed to meet the rigorous standards of government healthcare infrastructure
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature, index) => (
-              <div key={index} className="group bg-gradient-to-br from-white to-blue-50 p-8 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-blue-200">
-                <div className="bg-blue-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6"> {/* Larger icon container */}
-                  <feature.icon className="h-8 w-8 text-blue-800" /> {/* Larger icon */}
+              <div key={index} className="group bg-gradient-to-br from-white to-blue-50 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-blue-200">
+                <div className="bg-blue-100 w-14 h-14 rounded-xl flex items-center justify-center mb-4">
+                  <feature.icon className="h-7 w-7 text-blue-800" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">{feature.title}</h3>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.title}</h3>
                 <p className="text-gray-600 leading-relaxed">{feature.description}</p>
               </div>
             ))}
@@ -277,79 +124,155 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Technology Section with Operating Room - Larger container */}
-      <section id="technology" className="py-20 bg-blue-50">
+      {/* Benefits Section */}
+      <section id="benefits" className="py-16 bg-blue-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center"> {/* Increased gap */}
-            {/* Operating Room 3D Model - Larger container */}
-            <div className="bg-white rounded-2xl shadow-xl p-6"> {/* Increased padding and rounded */}
-              {modelsLoaded ? <OperatingRoomModel /> : <LoadingIndicator />}
-              <p className="text-center text-gray-600 mt-4 text-sm">
-                🔍 Drag to rotate • Scroll to zoom • Right-click to pan
-                <br />
-                <span className="text-blue-600 font-medium">Explore every corner of the operating room!</span>
-              </p>
-            </div>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Key Benefits</h2>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+              Transforming healthcare delivery through technology and innovation
+            </p>
+          </div>
 
-            <div className="text-left">
-              <h2 className="text-4xl font-bold text-gray-900 mb-6">Modern Medical Facilities</h2> {/* Larger text */}
-              <p className="text-xl text-gray-600 mb-6 leading-relaxed"> {/* Larger text */}
-                Our system integrates advanced technology with healthcare infrastructure 
-                to provide the best possible patient care and medical outcomes.
-              </p>
-              
-              <div className="space-y-6"> {/* Increased spacing */}
-                {technologyFeatures.map((feature, index) => (
-                  <div key={index} className="flex items-start space-x-4"> {/* Increased spacing */}
-                    <div className="bg-blue-100 p-3 rounded-lg"> {/* Larger icon container */}
-                      <feature.icon className="h-6 w-6 text-blue-800" /> {/* Larger icon */}
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900 text-lg">{feature.title}</h4> {/* Larger text */}
-                      <p className="text-gray-600">{feature.description}</p>
-                    </div>
-                  </div>
-                ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {benefits.map((benefit, index) => (
+              <div key={index} className="bg-white p-6 rounded-xl shadow-lg text-center">
+                <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <benefit.icon className="h-8 w-8 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">{benefit.title}</h3>
+                <p className="text-gray-600 text-sm">{benefit.description}</p>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="py-16 bg-gradient-to-r from-blue-600 to-blue-800 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <div>
+              <div className="text-3xl md:text-4xl font-bold mb-2">99%</div>
+              <div className="text-blue-200">Diagnosis Accuracy</div>
+            </div>
+            <div>
+              <div className="text-3xl md:text-4xl font-bold mb-2">24/7</div>
+              <div className="text-blue-200">System Availability</div>
+            </div>
+            <div>
+              <div className="text-3xl md:text-4xl font-bold mb-2">500+</div>
+              <div className="text-blue-200">Healthcare Partners</div>
+            </div>
+            <div>
+              <div className="text-3xl md:text-4xl font-bold mb-2">50K+</div>
+              <div className="text-blue-200">Patients Served</div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Final CTA Section */}
-      <section className="py-20 bg-blue-800 text-white">
+      {/* Enhanced Final CTA Section */}
+      <section className="py-20 bg-white">
         <div className="max-w-4xl mx-auto text-center px-4">
-          <DocumentChartBarIcon className="h-20 w-20 mx-auto mb-6 text-blue-300" /> {/* Larger icon */}
-          <h2 className="text-5xl font-bold mb-6">Ready to Access Healthcare Services?</h2> {/* Larger text */}
-          <p className="text-2xl mb-8 leading-relaxed"> {/* Larger text */}
-            Join thousands of citizens benefiting from our advanced medical expert system.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/register" className="bg-white text-blue-800 px-10 py-5 rounded-lg hover:bg-gray-100 transition-all duration-200 font-semibold text-xl"> {/* Larger button */}
-              Register as Patient
-              <ArrowRightIcon className="h-6 w-6 ml-2 inline-block" /> {/* Larger icon */}
-            </Link>
-            <Link to="/login" className="border-2 border-white text-white px-10 py-5 rounded-lg hover:bg-white hover:text-blue-800 transition-all duration-200 font-semibold text-xl"> {/* Larger button */}
-              Healthcare Staff Portal
-            </Link>
+          <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-2xl p-8 md:p-12 shadow-lg">
+            <DocumentChartBarIcon className="h-16 w-16 mx-auto mb-6 text-blue-600" />
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              Ready to Transform Healthcare Experience?
+            </h2>
+            <p className="text-lg text-gray-600 mb-6 max-w-2xl mx-auto">
+              Join our nationwide network of healthcare providers and patients benefiting from advanced medical technology.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div className="bg-white p-6 rounded-lg shadow-md">
+                <UserGroupIcon className="h-12 w-12 mx-auto mb-4 text-blue-600" />
+                <h3 className="font-semibold text-lg mb-2">For Patients</h3>
+                <p className="text-gray-600 text-sm mb-4">
+                  Easy registration, quick diagnosis, and seamless appointment booking
+                </p>
+                <Link to="/register" className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-200 font-medium inline-block">
+                  Get Started
+                </Link>
+              </div>
+              
+              <div className="bg-white p-6 rounded-lg shadow-md">
+                <ShieldCheckIcon className="h-12 w-12 mx-auto mb-4 text-green-600" />
+                <h3 className="font-semibold text-lg mb-2">For Healthcare Staff</h3>
+                <p className="text-gray-600 text-sm mb-4">
+                  Advanced tools for diagnosis, treatment, and patient management
+                </p>
+                <Link to="/login" className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition duration-200 font-medium inline-block">
+                  Staff Login
+                </Link>
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+              <h4 className="font-semibold text-blue-800 mb-2">Need Assistance?</h4>
+              <p className="text-blue-600 text-sm">
+                Contact our support team at <strong>+264 61 207 2052</strong> or email <strong>tfse@nust.na</strong>
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer id="contact" className="bg-gray-900 text-white py-16"> {/* Increased padding */}
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <div className="flex items-center justify-center space-x-3 mb-6">
-            <BuildingLibraryIcon className="h-10 w-10 text-blue-400" /> {/* Larger icon */}
-            <span className="text-3xl font-bold">MESMTF</span> {/* Larger text */}
-            <span className="text-3xl font-light text-blue-400">Pro</span> {/* Larger text */}
+      <footer id="contact" className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <div className="flex items-center space-x-3 mb-4">
+                <BuildingLibraryIcon className="h-8 w-8 text-blue-400" />
+                <span className="text-2xl font-bold">MESMTF</span>
+                <span className="text-xl font-light text-blue-400">Pro</span>
+              </div>
+              <p className="text-gray-400 text-sm">
+                Advanced Medical Expert System for Malaria and Typhoid Fever
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold mb-4">Quick Links</h4>
+              <ul className="space-y-2 text-gray-400 text-sm">
+                <li><a href="#features" className="hover:text-white transition duration-200">Features</a></li>
+                <li><a href="#benefits" className="hover:text-white transition duration-200">Benefits</a></li>
+                <li><Link to="/login" className="hover:text-white transition duration-200">Login</Link></li>
+                <li><Link to="/register" className="hover:text-white transition duration-200">Register</Link></li>
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold mb-4">Contact Info</h4>
+              <div className="space-y-2 text-gray-400 text-sm">
+                <div className="flex items-center space-x-2">
+                  <MapPinIcon className="h-4 w-4" />
+                  <span>13 Jackson Kaijieua Street, Windbrook, Namibia</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <PhoneIcon className="h-4 w-4" />
+                  <span>+264 61 207 2052</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <EnvelopeIcon className="h-4 w-4" />
+                  <span>tfse@nust.na</span>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold mb-4">Ministry</h4>
+              <p className="text-gray-400 text-sm">
+                Ministry of Health and Social Services<br />
+                Republic of Namibia
+              </p>
+            </div>
           </div>
-          <p className="text-gray-400 mb-4 text-lg"> {/* Larger text */}
-            Ministry of Health and Social Services - Republic of Namibia
-          </p>
-          <p className="text-gray-500 text-base"> {/* Larger text */}
-            © 2025 Medical Expert System for Malaria and Typhoid Fever. All rights reserved.
-          </p>
+          
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-500 text-sm">
+            <p>© 2025 Medical Expert System for Malaria and Typhoid Fever. All rights reserved.</p>
+          </div>
         </div>
       </footer>
     </div>
@@ -360,50 +283,55 @@ const features = [
   {
     icon: HeartIcon,
     title: 'AI-Powered Diagnosis',
-    description: 'Rule-based expert system for accurate Malaria and Typhoid detection.'
+    description: 'Rule-based expert system for accurate Malaria and Typhoid detection with comprehensive symptom analysis.'
   },
   {
     icon: DocumentChartBarIcon,
     title: 'Secure Medical Records',
-    description: 'Government-grade security with role-based access control.'
+    description: 'Government-grade security with role-based access control and encrypted data storage.'
   },
   {
     icon: ClockIcon,
     title: 'Appointment Management',
-    description: 'Efficient scheduling with healthcare professionals.'
+    description: 'Efficient scheduling system with automated reminders and healthcare professional matching.'
   },
   {
     icon: DevicePhoneMobileIcon,
     title: 'Multi-Platform Access',
-    description: 'Accessible across all devices with optimized performance.'
+    description: 'Fully responsive design accessible across all devices with optimized performance.'
   },
   {
     icon: UserGroupIcon,
     title: 'Role-Based System',
-    description: 'Workflows for patients, doctors, nurses, and administrators.'
+    description: 'Customized workflows for patients, doctors, nurses, pharmacists, and administrators.'
   },
   {
     icon: ChartBarIcon,
     title: 'Advanced Reporting',
-    description: 'Real-time analytics for informed decision-making.'
+    description: 'Real-time analytics and comprehensive reporting for informed decision-making.'
   }
 ];
 
-const technologyFeatures = [
+const benefits = [
   {
     icon: ShieldCheckIcon,
-    title: 'Advanced Security',
-    description: 'Protecting patient data with government-level security protocols'
+    title: 'Enhanced Security',
+    description: 'Military-grade encryption protecting sensitive patient data'
   },
   {
-    icon: DevicePhoneMobileIcon,
-    title: 'Integrated Systems',
-    description: 'Seamless connection with existing healthcare infrastructure'
+    icon: ClockIcon,
+    title: 'Time Efficiency',
+    description: 'Reduce diagnosis time by up to 70% with AI assistance'
   },
   {
     icon: ChartBarIcon,
-    title: 'Real-time Analytics',
-    description: 'Data-driven insights for better healthcare outcomes'
+    title: 'Data Insights',
+    description: 'Real-time analytics for public health monitoring'
+  },
+  {
+    icon: DevicePhoneMobileIcon,
+    title: 'Accessibility',
+    description: 'Available online and offline for remote areas'
   }
 ];
 
