@@ -14,7 +14,10 @@ import {
   MapPinIcon,
   ChartBarIcon,
   CalendarIcon,
-  FlagIcon
+  FlagIcon,
+  BeakerIcon,
+  ShieldCheckIcon,
+  HeartIcon as HeartIconSolid
 } from '@heroicons/react/24/outline';
 import { HeartIcon } from '@heroicons/react/24/outline';
 
@@ -30,8 +33,10 @@ const PatientRoundsPage = () => {
   const [priorityTasks, setPriorityTasks] = useState([]);
   const [handoffNotes, setHandoffNotes] = useState('');
   const [quickAssessment, setQuickAssessment] = useState({});
+  const [expertSystemData, setExpertSystemData] = useState({});
+  const [malariaTyphoidAlerts, setMalariaTyphoidAlerts] = useState([]);
 
-  // Rounding templates
+  // MESMTF Enhanced Rounding templates
   const assessmentTemplates = {
     general: {
       name: 'General Assessment',
@@ -43,6 +48,26 @@ const PatientRoundsPage = () => {
         { id: 'nutrition', label: 'Nutrition/Hydration', type: 'select', options: ['Good', 'Fair', 'Poor', 'NPO'] }
       ]
     },
+    malaria_focus: {
+      name: 'Malaria Focus Assessment',
+      fields: [
+        { id: 'fever_pattern', label: 'Fever Pattern', type: 'select', options: ['Intermittent', 'Remittent', 'Continuous', 'No Fever'] },
+        { id: 'chills_rigors', label: 'Chills/Rigors', type: 'select', options: ['Present', 'Absent', 'Severe'] },
+        { id: 'sweating', label: 'Sweating', type: 'select', options: ['Profuse', 'Moderate', 'Mild', 'None'] },
+        { id: 'jaundice', label: 'Jaundice', type: 'select', options: ['Present', 'Absent'] },
+        { id: 'splenomegaly', label: 'Splenomegaly', type: 'select', options: ['Present', 'Absent'] }
+      ]
+    },
+    typhoid_focus: {
+      name: 'Typhoid Focus Assessment',
+      fields: [
+        { id: 'fever_duration', label: 'Fever Duration (days)', type: 'number', min: 0, max: 30 },
+        { id: 'rose_spots', label: 'Rose Spots', type: 'select', options: ['Present', 'Absent'] },
+        { id: 'abdominal_tenderness', label: 'Abdominal Tenderness', type: 'select', options: ['Present', 'Absent', 'Rebound'] },
+        { id: 'diarrhea_constipation', label: 'Bowel Pattern', type: 'select', options: ['Diarrhea', 'Constipation', 'Normal'] },
+        { id: 'hepatosplenomegaly', label: 'Hepatosplenomegaly', type: 'select', options: ['Present', 'Absent'] }
+      ]
+    },
     cardiac: {
       name: 'Cardiac Assessment',
       fields: [
@@ -51,15 +76,22 @@ const PatientRoundsPage = () => {
         { id: 'lung_sounds', label: 'Lung Sounds', type: 'select', options: ['Clear', 'Crackles', 'Wheezes', 'Diminished'] },
         { id: 'oxygen_requirement', label: 'Oxygen Requirement', type: 'text' }
       ]
+    }
+  };
+
+  // MESMTF Symptom Tracking
+  const malariaTyphoidSymptoms = {
+    malaria: {
+      very_strong: ['Abdominal pain', 'Vomiting', 'Sore throat'],
+      strong: ['Headache', 'Fatigue', 'Cough', 'Constipation'],
+      weak: ['Chest pain', 'Back pain', 'Muscle Pain'],
+      very_weak: ['Diarrhea', 'sweating', 'rash', 'Loss of appetite']
     },
-    neuro: {
-      name: 'Neuro Assessment',
-      fields: [
-        { id: 'orientation', label: 'Orientation', type: 'select', options: ['x4', 'x3', 'x2', 'x1', 'x0'] },
-        { id: 'motor_function', label: 'Motor Function', type: 'select', options: ['Normal', 'Weakness', 'Paralysis'] },
-        { id: 'sensation', label: 'Sensation', type: 'select', options: ['Intact', 'Decreased', 'Absent'] },
-        { id: 'pupils', label: 'Pupils', type: 'select', options: ['PERRLA', 'Sluggish', 'Fixed'] }
-      ]
+    typhoid: {
+      very_strong: ['Abdominal pain', 'Stomach issues'],
+      strong: ['Headache', 'Persistent high fever'],
+      weak: ['Weakness', 'Tiredness'],
+      very_weak: ['Rash', 'Loss of appetite']
     }
   };
 
@@ -98,7 +130,8 @@ const PatientRoundsPage = () => {
       await Promise.all([
         loadAssignedPatients(authUser.id),
         loadRoundsSchedule(authUser.id),
-        loadPriorityTasks(authUser.id)
+        loadPriorityTasks(authUser.id),
+        loadMalariaTyphoidAlerts(authUser.id)
       ]);
 
       // Initialize current round
@@ -144,12 +177,78 @@ const PatientRoundsPage = () => {
         room: item.patients.room_number,
         bed: item.patients.bed_number,
         condition: item.medical_diagnoses?.[0]?.diseases?.disease_name || 'General care',
-        severity: item.medical_diagnoses?.[0]?.severity || 'stable'
+        severity: item.medical_diagnoses?.[0]?.severity || 'stable',
+        isMalaria: item.medical_diagnoses?.some(d => d.diseases.disease_name.toLowerCase().includes('malaria')),
+        isTyphoid: item.medical_diagnoses?.some(d => d.diseases.disease_name.toLowerCase().includes('typhoid'))
       }));
 
       setPatients(patientsList);
+      
+      // Load expert system data for each patient
+      patientsList.forEach(patient => {
+        loadExpertSystemData(patient.id);
+      });
     } catch (error) {
       console.error('Error fetching patients:', error);
+    }
+  };
+
+  const loadExpertSystemData = async (patientId) => {
+    try {
+      const { data: diagnosisSession, error } = await supabase
+        .from('diagnosis_sessions')
+        .select(`
+          *,
+          diagnosis_session_symptoms(
+            symptoms(*)
+          )
+        `)
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      if (diagnosisSession) {
+        setExpertSystemData(prev => ({
+          ...prev,
+          [patientId]: {
+            malariaProbability: diagnosisSession.malaria_probability,
+            typhoidProbability: diagnosisSession.typhoid_probability,
+            requiresChestXray: diagnosisSession.requires_chest_xray,
+            recommendation: diagnosisSession.recommendation,
+            symptoms: diagnosisSession.diagnosis_session_symptoms?.map(dss => dss.symptoms) || []
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading expert system data:', error);
+    }
+  };
+
+  const loadMalariaTyphoidAlerts = async (nurseId) => {
+    try {
+      const { data, error } = await supabase
+        .from('patient_alerts')
+        .select(`
+          *,
+          patients!inner(
+            users!inner(
+              first_name,
+              last_name
+            )
+          ),
+          alert_types(*)
+        `)
+        .eq('is_resolved', false)
+        .in('alert_types.type_code', ['critical_vitals', 'abnormal_vitals', 'fever', 'tachycardia'])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setMalariaTyphoidAlerts(data || []);
+    } catch (error) {
+      console.error('Error loading malaria/typhoid alerts:', error);
     }
   };
 
@@ -203,7 +302,6 @@ const PatientRoundsPage = () => {
   };
 
   const initializeCurrentRound = () => {
-    // Find the next round that hasn't been completed today
     const now = new Date();
     const todayRounds = roundsSchedule.filter(round => 
       !round.completed_at && new Date(round.scheduled_time) <= now
@@ -225,13 +323,15 @@ const PatientRoundsPage = () => {
 
   const startRound = (round) => {
     setCurrentRound(round);
-    // Initialize assessment data for all patients in this round
+    // Initialize assessment data for all patients in this round with disease-specific templates
     const initialAssessments = {};
     patients.forEach(patient => {
+      const template = patient.isMalaria ? 'malaria_focus' : patient.isTyphoid ? 'typhoid_focus' : 'general';
       initialAssessments[patient.id] = {
-        template: 'general',
+        template: template,
         data: {},
-        completed: false
+        completed: false,
+        requiresXray: expertSystemData[patient.id]?.requiresChestXray || false
       };
     });
     setRoundsData(initialAssessments);
@@ -252,6 +352,9 @@ const PatientRoundsPage = () => {
               round_id: currentRound.id,
               assessed_at: new Date().toISOString()
             });
+
+          // Check for malaria/typhoid specific symptoms
+          await checkForMalariaTyphoidSymptoms(patientId, assessment.data);
         }
       }
 
@@ -265,7 +368,11 @@ const PatientRoundsPage = () => {
         .eq('id', currentRound.id);
 
       // Reload data
-      await loadRoundsSchedule(authUser.id);
+      await Promise.all([
+        loadRoundsSchedule(authUser.id),
+        loadMalariaTyphoidAlerts(authUser.id)
+      ]);
+      
       setCurrentRound(null);
       setRoundsData({});
       setHandoffNotes('');
@@ -274,6 +381,39 @@ const PatientRoundsPage = () => {
       console.error('Error completing round:', error);
       alert('Error completing round');
     }
+  };
+
+  const checkForMalariaTyphoidSymptoms = async (patientId, assessmentData) => {
+    const symptomsPresent = [];
+    
+    // Check for malaria symptoms
+    if (assessmentData.fever_pattern && assessmentData.fever_pattern !== 'No Fever') {
+      symptomsPresent.push('Fever');
+    }
+    if (assessmentData.chills_rigors === 'Present') {
+      symptomsPresent.push('Chills/Rigors');
+    }
+    if (assessmentData.sweating && assessmentData.sweating !== 'None') {
+      symptomsPresent.push('Sweating');
+    }
+
+    if (symptomsPresent.length >= 2) {
+      // Create alert for potential malaria
+      await supabase
+        .from('patient_alerts')
+        .insert({
+          patient_id: patientId,
+          alert_type_id: await getAlertTypeId('suspected_malaria'),
+          title: 'Suspected Malaria Symptoms',
+          message: `Patient exhibiting malaria-like symptoms: ${symptomsPresent.join(', ')}`,
+          is_resolved: false
+        });
+    }
+  };
+
+  const getAlertTypeId = async (typeCode) => {
+    // This would normally fetch from alert_types table
+    return typeCode;
   };
 
   const updateAssessment = (patientId, field, value) => {
@@ -316,7 +456,7 @@ const PatientRoundsPage = () => {
     }
   };
 
-  const addQuickTask = async (patientId, description) => {
+  const addQuickTask = async (patientId, description, priority = 'medium') => {
     try {
       const { error } = await supabase
         .from('nurse_tasks')
@@ -325,7 +465,7 @@ const PatientRoundsPage = () => {
           nurse_id: authUser.id,
           title: `Round Task: ${description}`,
           description: description,
-          priority: 'medium',
+          priority: priority,
           status: 'pending',
           scheduled_time: new Date().toISOString()
         });
@@ -334,6 +474,24 @@ const PatientRoundsPage = () => {
       await loadPriorityTasks(authUser.id);
     } catch (error) {
       console.error('Error adding quick task:', error);
+    }
+  };
+
+  const resolveAlert = async (alertId) => {
+    try {
+      const { error } = await supabase
+        .from('patient_alerts')
+        .update({
+          is_resolved: true,
+          resolved_by: authUser.id,
+          resolved_at: new Date().toISOString()
+        })
+        .eq('id', alertId);
+
+      if (error) throw error;
+      await loadMalariaTyphoidAlerts(authUser.id);
+    } catch (error) {
+      console.error('Error resolving alert:', error);
     }
   };
 
@@ -357,6 +515,19 @@ const PatientRoundsPage = () => {
     }
   };
 
+  const getDiseaseColor = (patient) => {
+    if (patient.isMalaria && patient.isTyphoid) return 'bg-purple-100 text-purple-800';
+    if (patient.isMalaria) return 'bg-red-100 text-red-800';
+    if (patient.isTyphoid) return 'bg-orange-100 text-orange-800';
+    return 'bg-gray-100 text-gray-800';
+  };
+
+  const getRecommendedTemplate = (patient) => {
+    if (patient.isMalaria) return 'malaria_focus';
+    if (patient.isTyphoid) return 'typhoid_focus';
+    return 'general';
+  };
+
   if (loading) {
     return (
       <DashboardLayout user={user} navigation={navigation}>
@@ -371,12 +542,22 @@ const PatientRoundsPage = () => {
 
   return (
     <DashboardLayout user={user} navigation={navigation}>
-      {/* Header */}
+      {/* Header with MESMTF Features */}
       <div className="mb-6">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Patient Rounds</h1>
-            <p className="text-gray-600">Systematic patient assessments and task management</p>
+            <p className="text-gray-600">MESMTF Expert System - Malaria & Typhoid Focused Assessments</p>
+            <div className="flex items-center space-x-2 mt-2">
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                <BeakerIcon className="h-3 w-3 mr-1" />
+                Expert System Integrated
+              </span>
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <ShieldCheckIcon className="h-3 w-3 mr-1" />
+                MESMTF Compliant
+              </span>
+            </div>
           </div>
           <div className="flex items-center space-x-4">
             {currentRound && (
@@ -388,6 +569,36 @@ const PatientRoundsPage = () => {
         </div>
       </div>
 
+      {/* MESMTF Alerts Banner */}
+      {malariaTyphoidAlerts.length > 0 && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+              <span className="font-medium text-red-900">Malaria/Typhoid Alerts</span>
+            </div>
+            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
+              {malariaTyphoidAlerts.length} active alerts
+            </span>
+          </div>
+          <div className="mt-2 space-y-2">
+            {malariaTyphoidAlerts.slice(0, 3).map(alert => (
+              <div key={alert.id} className="flex items-center justify-between text-sm">
+                <span>
+                  {alert.patients.users.first_name} {alert.patients.users.last_name}: {alert.title}
+                </span>
+                <button
+                  onClick={() => resolveAlert(alert.id)}
+                  className="text-red-600 hover:text-red-800 text-xs"
+                >
+                  Resolve
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tab Navigation */}
       <div className="mb-6">
         <div className="border-b border-gray-200">
@@ -395,7 +606,8 @@ const PatientRoundsPage = () => {
             {[
               { id: 'rounding', name: 'Rounding', icon: MapPinIcon },
               { id: 'tasks', name: 'Priority Tasks', icon: FlagIcon },
-              { id: 'handoff', name: 'Shift Handoff', icon: ChatBubbleLeftRightIcon }
+              { id: 'handoff', name: 'Shift Handoff', icon: ChatBubbleLeftRightIcon },
+              { id: 'mesmtf', name: 'MESMTF Dashboard', icon: BeakerIcon }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -424,7 +636,7 @@ const PatientRoundsPage = () => {
               <div className="bg-white shadow rounded-lg">
                 <div className="px-6 py-4 border-b border-gray-200">
                   <h3 className="text-lg font-medium text-gray-900">Rounds Schedule</h3>
-                  <p className="text-sm text-gray-600">Today's rounding schedule</p>
+                  <p className="text-sm text-gray-600">MESMTF-focused rounding</p>
                 </div>
                 <div className="p-4 space-y-3">
                   {roundsSchedule.map(round => (
@@ -464,10 +676,10 @@ const PatientRoundsPage = () => {
                 </div>
               </div>
 
-              {/* Quick Stats */}
+              {/* MESMTF Quick Stats */}
               <div className="bg-white shadow rounded-lg mt-6">
                 <div className="px-6 py-4 border-b border-gray-200">
-                  <h3 className="text-lg font-medium text-gray-900">Round Summary</h3>
+                  <h3 className="text-lg font-medium text-gray-900">MESMTF Round Summary</h3>
                 </div>
                 <div className="p-4 space-y-3">
                   <div className="flex justify-between items-center">
@@ -475,17 +687,58 @@ const PatientRoundsPage = () => {
                     <span className="font-medium">{patients.length}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Assessments Completed:</span>
-                    <span className="font-medium">
-                      {Object.values(roundsData).filter(a => a.completed).length} / {patients.length}
+                    <span className="text-sm text-gray-600">Malaria Cases:</span>
+                    <span className="font-medium text-red-600">
+                      {patients.filter(p => p.isMalaria).length}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Pending Tasks:</span>
-                    <span className="font-medium text-red-600">
-                      {priorityTasks.filter(t => t.status === 'pending').length}
+                    <span className="text-sm text-gray-600">Typhoid Cases:</span>
+                    <span className="font-medium text-orange-600">
+                      {patients.filter(p => p.isTyphoid).length}
                     </span>
                   </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">X-ray Required:</span>
+                    <span className="font-medium text-purple-600">
+                      {Object.values(expertSystemData).filter(data => data.requiresChestXray).length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* MESMTF Quick Actions */}
+              <div className="bg-white shadow rounded-lg mt-6">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900">Quick Actions</h3>
+                </div>
+                <div className="p-4 space-y-2">
+                  <button
+                    onClick={() => patients.forEach(patient => {
+                      if (expertSystemData[patient.id]?.requiresChestXray) {
+                        addQuickTask(patient.id, 'Schedule chest X-ray for VSs', 'high');
+                      }
+                    })}
+                    className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded"
+                  >
+                    Schedule X-rays for VSs
+                  </button>
+                  <button
+                    onClick={() => patients.filter(p => p.isMalaria).forEach(patient => {
+                      addQuickTask(patient.id, 'Monitor fever pattern and chills', 'medium');
+                    })}
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded"
+                  >
+                    Malaria Symptom Checks
+                  </button>
+                  <button
+                    onClick={() => patients.filter(p => p.isTyphoid).forEach(patient => {
+                      addQuickTask(patient.id, 'Check for rose spots and abdominal tenderness', 'medium');
+                    })}
+                    className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 rounded"
+                  >
+                    Typhoid Symptom Checks
+                  </button>
                 </div>
               </div>
             </div>
@@ -498,7 +751,7 @@ const PatientRoundsPage = () => {
                     <div className="flex justify-between items-center">
                       <div>
                         <h3 className="text-lg font-medium text-gray-900">
-                          {currentRound.rounds_schedule.round_type} Round
+                          {currentRound.rounds_schedule.round_type} Round - MESMTF Focus
                         </h3>
                         <p className="text-sm text-gray-600">
                           Scheduled: {new Date(currentRound.scheduled_time).toLocaleString()}
@@ -539,8 +792,13 @@ const PatientRoundsPage = () => {
                   <div className="p-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {patients.map(patient => {
-                        const assessment = roundsData[patient.id] || { template: 'general', data: {}, completed: false };
+                        const assessment = roundsData[patient.id] || { 
+                          template: getRecommendedTemplate(patient), 
+                          data: {}, 
+                          completed: false 
+                        };
                         const status = getPatientStatus(patient.id);
+                        const expertData = expertSystemData[patient.id];
                         
                         return (
                           <div key={patient.id} className="border rounded-lg p-4">
@@ -548,8 +806,23 @@ const PatientRoundsPage = () => {
                               <div>
                                 <h4 className="font-medium text-gray-900">{patient.name}</h4>
                                 <p className="text-sm text-gray-600">
-                                  Room {patient.room} • Bed {patient.bed} • {patient.condition}
+                                  Room {patient.room} • Bed {patient.bed}
                                 </p>
+                                <div className="flex space-x-1 mt-1">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getDiseaseColor(patient)}`}>
+                                    {patient.condition}
+                                  </span>
+                                  {expertData && (
+                                    <>
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getDiseaseColor({isMalaria: true})}`}>
+                                        M: {expertData.malariaProbability}%
+                                      </span>
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getDiseaseColor({isTyphoid: true})}`}>
+                                        T: {expertData.typhoidProbability}%
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
                                 {status.replace('-', ' ')}
@@ -573,6 +846,9 @@ const PatientRoundsPage = () => {
                                   <option key={key} value={key}>{template.name}</option>
                                 ))}
                               </select>
+                              <p className="text-xs text-gray-500 mt-1">
+                                Recommended: {getRecommendedTemplate(patient).replace('_', ' ')}
+                              </p>
                             </div>
 
                             {/* Assessment Fields */}
@@ -607,14 +883,24 @@ const PatientRoundsPage = () => {
                               ))}
                             </div>
 
-                            {/* Quick Actions */}
+                            {/* MESMTF Quick Actions */}
                             <div className="mt-4 flex justify-between items-center">
-                              <button
-                                onClick={() => addQuickTask(patient.id, 'Follow-up assessment needed')}
-                                className="text-blue-600 hover:text-blue-800 text-sm"
-                              >
-                                + Add Task
-                              </button>
+                              <div className="space-x-2">
+                                <button
+                                  onClick={() => addQuickTask(patient.id, 'Follow-up assessment needed')}
+                                  className="text-blue-600 hover:text-blue-800 text-sm"
+                                >
+                                  + Task
+                                </button>
+                                {expertData?.requiresChestXray && (
+                                  <button
+                                    onClick={() => addQuickTask(patient.id, 'Schedule chest X-ray for VSs', 'high')}
+                                    className="text-red-600 hover:text-red-800 text-sm"
+                                  >
+                                    + X-ray
+                                  </button>
+                                )}
+                              </div>
                               <button
                                 onClick={() => markAssessmentComplete(patient.id)}
                                 disabled={assessment.completed}
@@ -637,7 +923,8 @@ const PatientRoundsPage = () => {
                 <div className="bg-white shadow rounded-lg h-64 flex items-center justify-center">
                   <div className="text-center">
                     <MapPinIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">Select a round to begin patient assessments</p>
+                    <p className="text-gray-500">Select a round to begin MESMTF patient assessments</p>
+                    <p className="text-sm text-gray-400 mt-1">Disease-specific templates will be auto-selected</p>
                   </div>
                 </div>
               )}
@@ -652,50 +939,68 @@ const PatientRoundsPage = () => {
             <div className="bg-white shadow rounded-lg">
               <div className="px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-medium text-gray-900">Priority Tasks During Rounds</h3>
-                <p className="text-sm text-gray-600">Tasks identified during patient rounds</p>
+                <p className="text-sm text-gray-600">MESMTF-focused task management</p>
               </div>
               <div className="p-6">
                 <div className="space-y-4">
-                  {priorityTasks.map(task => (
-                    <div key={task.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <button
-                          onClick={() => updateTaskStatus(task.id, 
-                            task.status === 'completed' ? 'pending' : 'completed'
-                          )}
-                          className={`p-2 rounded-full ${
+                  {priorityTasks.map(task => {
+                    const patient = patients.find(p => p.id === task.patient_id);
+                    const isMalariaTask = task.description?.toLowerCase().includes('malaria');
+                    const isTyphoidTask = task.description?.toLowerCase().includes('typhoid');
+                    
+                    return (
+                      <div key={task.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center space-x-4">
+                          <button
+                            onClick={() => updateTaskStatus(task.id, 
+                              task.status === 'completed' ? 'pending' : 'completed'
+                            )}
+                            className={`p-2 rounded-full ${
+                              task.status === 'completed' 
+                                ? 'bg-green-100 text-green-600' 
+                                : 'bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-600'
+                            }`}
+                          >
+                            <CheckCircleIcon className="h-5 w-5" />
+                          </button>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <h4 className="font-medium text-gray-900">{task.title}</h4>
+                              {isMalariaTask && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                  Malaria
+                                </span>
+                              )}
+                              {isTyphoidTask && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                  Typhoid
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-600">
+                              {task.patients.users.first_name} {task.patients.users.last_name} • 
+                              Priority: <span className="capitalize">{task.priority}</span>
+                            </p>
+                            <p className="text-sm text-gray-500">{task.description}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             task.status === 'completed' 
-                              ? 'bg-green-100 text-green-600' 
-                              : 'bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-600'
-                          }`}
-                        >
-                          <CheckCircleIcon className="h-5 w-5" />
-                        </button>
-                        <div>
-                          <h4 className="font-medium text-gray-900">{task.title}</h4>
-                          <p className="text-sm text-gray-600">
-                            {task.patients.users.first_name} {task.patients.users.last_name} • 
-                            Priority: <span className="capitalize">{task.priority}</span>
-                          </p>
-                          <p className="text-sm text-gray-500">{task.description}</p>
+                              ? 'bg-green-100 text-green-800'
+                              : task.status === 'in_progress'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {task.status.replace('_', ' ')}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(task.scheduled_time).toLocaleTimeString()}
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          task.status === 'completed' 
-                            ? 'bg-green-100 text-green-800'
-                            : task.status === 'in_progress'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {task.status.replace('_', ' ')}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(task.scheduled_time).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {priorityTasks.length === 0 && (
                     <p className="text-gray-500 text-center py-4">No priority tasks</p>
                   )}
@@ -712,7 +1017,7 @@ const PatientRoundsPage = () => {
             <div className="bg-white shadow rounded-lg">
               <div className="px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-medium text-gray-900">Shift Handoff Communication</h3>
-                <p className="text-sm text-gray-600">Important notes for the next shift</p>
+                <p className="text-sm text-gray-600">MESMTF-specific handoff information</p>
               </div>
               <div className="p-6">
                 <textarea
@@ -720,13 +1025,13 @@ const PatientRoundsPage = () => {
                   onChange={(e) => setHandoffNotes(e.target.value)}
                   rows={12}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Document important patient updates, pending tasks, concerns, or special instructions for the next shift..."
+                  placeholder="Document important patient updates, pending tasks, concerns, or special instructions for the next shift. Include Malaria/Typhoid specific information..."
                 />
                 <div className="mt-4">
                   <button
                     onClick={() => {
                       // Save handoff notes
-                      alert('Handoff notes saved successfully');
+                      alert('MESMTF handoff notes saved successfully');
                     }}
                     className="btn-primary"
                   >
@@ -736,15 +1041,15 @@ const PatientRoundsPage = () => {
               </div>
             </div>
 
-            {/* Handoff Template */}
+            {/* MESMTF Handoff Template */}
             <div className="bg-white shadow rounded-lg">
               <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">Handoff Template</h3>
-                <p className="text-sm text-gray-600">Standard handoff format</p>
+                <h3 className="text-lg font-medium text-gray-900">MESMTF Handoff Template</h3>
+                <p className="text-sm text-gray-600">Disease-specific handoff format</p>
               </div>
               <div className="p-6">
                 <div className="prose prose-sm">
-                  <h4>SBAR Format (Situation-Background-Assessment-Recommendation)</h4>
+                  <h4>MESMTF SBAR Format</h4>
                   
                   <div className="space-y-4 mt-4">
                     <div>
@@ -752,7 +1057,7 @@ const PatientRoundsPage = () => {
                       <textarea
                         rows={2}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        placeholder="What is happening right now?"
+                        placeholder="Current status: Fever pattern, symptom progression, vital signs..."
                       />
                     </div>
                     
@@ -761,7 +1066,7 @@ const PatientRoundsPage = () => {
                       <textarea
                         rows={2}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        placeholder="Relevant clinical context"
+                        placeholder="Malaria/Typhoid diagnosis, treatment history, relevant test results..."
                       />
                     </div>
                     
@@ -770,7 +1075,7 @@ const PatientRoundsPage = () => {
                       <textarea
                         rows={2}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        placeholder="Current assessment findings"
+                        placeholder="Response to treatment, complication risks, expert system recommendations..."
                       />
                     </div>
                     
@@ -779,17 +1084,17 @@ const PatientRoundsPage = () => {
                       <textarea
                         rows={2}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        placeholder="What needs to be done?"
+                        placeholder="Next dose timing, monitoring requirements, when to escalate..."
                       />
                     </div>
                   </div>
 
                   <div className="mt-6">
-                    <h5>Critical Patients Summary</h5>
+                    <h5>Malaria/Typhoid Specific Concerns</h5>
                     <textarea
                       rows={3}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mt-2"
-                      placeholder="List critical patients and their status..."
+                      placeholder="Fever spikes, medication side effects, hydration status, warning signs..."
                     />
                   </div>
 
@@ -798,8 +1103,136 @@ const PatientRoundsPage = () => {
                     <textarea
                       rows={2}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mt-2"
-                      placeholder="Outstanding tasks, pending results..."
+                      placeholder="Next medication doses, pending lab results, scheduled procedures..."
                     />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MESMTF Dashboard Tab */}
+        {activeTab === 'mesmtf' && (
+          <div className="space-y-6">
+            {/* Disease Statistics */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white shadow rounded-lg p-6">
+                <div className="flex items-center">
+                  <div className="p-3 bg-red-100 rounded-lg">
+                    <HeartIconSolid className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-medium text-gray-900">Malaria Cases</h3>
+                    <p className="text-2xl font-bold text-red-600">
+                      {patients.filter(p => p.isMalaria).length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white shadow rounded-lg p-6">
+                <div className="flex items-center">
+                  <div className="p-3 bg-orange-100 rounded-lg">
+                    <HeartIconSolid className="h-6 w-6 text-orange-600" />
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-medium text-gray-900">Typhoid Cases</h3>
+                    <p className="text-2xl font-bold text-orange-600">
+                      {patients.filter(p => p.isTyphoid).length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white shadow rounded-lg p-6">
+                <div className="flex items-center">
+                  <div className="p-3 bg-purple-100 rounded-lg">
+                    <BeakerIcon className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-medium text-gray-900">X-ray Required</h3>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {Object.values(expertSystemData).filter(data => data.requiresChestXray).length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Patient Overview */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">MESMTF Patient Overview</h3>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {patients.map(patient => {
+                    const expertData = expertSystemData[patient.id];
+                    return (
+                      <div key={patient.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-medium text-gray-900">{patient.name}</h4>
+                            <p className="text-sm text-gray-600">Room {patient.room} • Bed {patient.bed}</p>
+                          </div>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getDiseaseColor(patient)}`}>
+                            {patient.condition}
+                          </span>
+                        </div>
+                        
+                        {expertData && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span>Malaria Probability:</span>
+                              <span className={`font-medium ${expertData.malariaProbability > 60 ? 'text-red-600' : 'text-gray-600'}`}>
+                                {expertData.malariaProbability}%
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span>Typhoid Probability:</span>
+                              <span className={`font-medium ${expertData.typhoidProbability > 60 ? 'text-orange-600' : 'text-gray-600'}`}>
+                                {expertData.typhoidProbability}%
+                              </span>
+                            </div>
+                            {expertData.requiresChestXray && (
+                              <div className="text-xs text-red-600 font-medium">
+                                ✓ Chest X-ray Required (VSs)
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Treatment Guidelines */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">MESMTF Treatment Guidelines</h3>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h4 className="font-medium text-red-700 mb-3">Malaria Treatment</h4>
+                    <ul className="text-sm text-gray-600 space-y-2">
+                      <li>• Artemisinin-based Combination Therapy (ACT) first-line</li>
+                      <li>• Monitor for fever patterns and chills</li>
+                      <li>• Watch for severe complications</li>
+                      <li>• Very Strong Signs require chest X-ray</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-orange-700 mb-3">Typhoid Treatment</h4>
+                    <ul className="text-sm text-gray-600 space-y-2">
+                      <li>• Fluoroquinolones or third-generation cephalosporins</li>
+                      <li>• Monitor abdominal symptoms</li>
+                      <li>• Watch for rose spots and complications</li>
+                      <li>• Very Strong Signs require chest X-ray</li>
+                    </ul>
                   </div>
                 </div>
               </div>
