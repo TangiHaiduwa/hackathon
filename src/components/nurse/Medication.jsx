@@ -13,11 +13,14 @@ import {
   UserGroupIcon,
   EyeIcon,
   ChartBarIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  BeakerIcon,
+  ShieldCheckIcon,
+  ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon } from '@heroicons/react/24/outline';
 
-const Medication= () => {
+const Medication = () => {
   const { user: authUser } = useAuth();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,6 +33,35 @@ const Medication= () => {
   const [administeringMed, setAdministeringMed] = useState(null);
   const [missedReason, setMissedReason] = useState('');
   const [refusalReason, setRefusalReason] = useState('');
+  const [expertSystemResults, setExpertSystemResults] = useState({});
+  const [showDiagnosisPanel, setShowDiagnosisPanel] = useState(false);
+  const [patientSymptoms, setPatientSymptoms] = useState([]);
+
+  // MESMTF Competition Requirements - Malaria/Typhoid Expert System
+  const malariaTyphoidDrugs = {
+    malaria: {
+      drugs: ['Artemisinin-based Combination Therapy (ACT)', 'Chloroquine', 'Quinine', 'Primaquine'],
+      guidelines: 'Administer based on malaria type and patient history. ACT is first-line treatment.',
+      requiresXray: ['Abdominal pain', 'Vomiting', 'Sore throat'] // VSs
+    },
+    typhoid: {
+      drugs: ['Ciprofloxacin', 'Azithromycin', 'Ceftriaxone', 'Amoxicillin'],
+      guidelines: 'Fluoroquinolones are first-line. Adjust based on resistance patterns.',
+      requiresXray: ['Abdominal pain', 'Stomach issues'] // VSs
+    },
+    combined: {
+      drugs: ['ACT + Ciprofloxacin', 'ACT + Azithromycin', 'Quinine + Ceftriaxone'],
+      guidelines: 'Combination therapy for co-infection. Monitor for drug interactions.',
+      requiresXray: ['Abdominal pain', 'Vomiting', 'Stomach issues'] // Any VSs
+    }
+  };
+
+  const symptomCategories = {
+    very_strong: { weight: 4, requiresXray: true, drugs: 'full_treatment' },
+    strong: { weight: 3, requiresXray: false, drugs: 'standard_treatment' },
+    weak: { weight: 2, requiresXray: false, drugs: 'symptomatic_treatment' },
+    very_weak: { weight: 1, requiresXray: false, drugs: 'observation' }
+  };
 
   const navigation = [
     { name: 'Dashboard', href: '/nurse-dashboard', icon: UserGroupIcon, current: true },
@@ -40,7 +72,6 @@ const Medication= () => {
     { name: 'Patient Rounds', href: '/patient-rounds-page', icon: DocumentTextIcon },
   ];
 
-  // Status options
   const statusOptions = {
     scheduled: { label: 'Scheduled', color: 'bg-blue-100 text-blue-800' },
     administered: { label: 'Administered', color: 'bg-green-100 text-green-800' },
@@ -113,8 +144,54 @@ const Medication= () => {
       }));
 
       setPatients(patientsList);
+      
+      // Load expert system data for each patient
+      patientsList.forEach(patient => {
+        loadExpertSystemData(patient.id);
+      });
+
     } catch (error) {
       console.error('Error fetching patients:', error);
+    }
+  };
+
+  const loadExpertSystemData = async (patientId) => {
+    try {
+      // Get latest diagnosis session for this patient
+      const { data: diagnosisSession, error } = await supabase
+        .from('diagnosis_sessions')
+        .select(`
+          *,
+          diagnosis_session_symptoms(
+            symptoms(*)
+          )
+        `)
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
+
+      if (diagnosisSession) {
+        setExpertSystemResults(prev => ({
+          ...prev,
+          [patientId]: {
+            malariaProbability: diagnosisSession.malaria_probability,
+            typhoidProbability: diagnosisSession.typhoid_probability,
+            requiresChestXray: diagnosisSession.requires_chest_xray,
+            recommendation: diagnosisSession.recommendation,
+            symptoms: diagnosisSession.diagnosis_session_symptoms?.map(dss => dss.symptoms) || []
+          }
+        }));
+
+        // Also set symptoms for the diagnosis panel
+        if (diagnosisSession.diagnosis_session_symptoms) {
+          setPatientSymptoms(diagnosisSession.diagnosis_session_symptoms.map(dss => dss.symptoms.symptom_name));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading expert system data:', error);
     }
   };
 
@@ -133,14 +210,23 @@ const Medication= () => {
           *,
           prescription_items!inner(
             dosage_instructions,
+            duration_days,
             drugs!inner(
               drug_name,
+              generic_name,
               dosage,
               form_id,
               drug_forms(form_name)
             ),
             prescriptions!inner(
               patient_id,
+              diagnosis_id,
+              medical_diagnoses!inner(
+                disease_id,
+                diseases!inner(
+                  disease_name
+                )
+              ),
               patients!inner(
                 users!inner(
                   first_name,
@@ -154,7 +240,6 @@ const Medication= () => {
         .lte('scheduled_time', `${selectedDate}T23:59:59`)
         .order('scheduled_time', { ascending: true });
 
-      // Filter by patient if not "all"
       if (selectedPatient !== 'all') {
         query = query.eq('prescription_items.prescriptions.patient_id', selectedPatient);
       }
@@ -168,15 +253,19 @@ const Medication= () => {
         patientId: med.prescription_items.prescriptions.patient_id,
         patientName: `${med.prescription_items.prescriptions.patients.users.first_name} ${med.prescription_items.prescriptions.patients.users.last_name}`,
         medication: med.prescription_items.drugs.drug_name,
+        genericName: med.prescription_items.drugs.generic_name,
         dosage: med.prescription_items.drugs.dosage,
         form: med.prescription_items.drugs.drug_forms?.form_name || 'Tablet',
         instructions: med.prescription_items.dosage_instructions,
+        duration: med.prescription_items.duration_days,
+        disease: med.prescription_items.prescriptions.medical_diagnoses?.diseases?.disease_name || 'Unknown',
         scheduledTime: new Date(med.scheduled_time),
         administeredTime: med.administered_time ? new Date(med.administered_time) : null,
         status: med.status,
         administeredBy: med.administered_by,
         notes: med.notes,
-        isOverdue: med.status === 'scheduled' && new Date(med.scheduled_time) < new Date()
+        isOverdue: med.status === 'scheduled' && new Date(med.scheduled_time) < new Date(),
+        expertData: expertSystemResults[med.prescription_items.prescriptions.patient_id]
       }));
 
       setMedicationSchedule(schedule);
@@ -187,9 +276,8 @@ const Medication= () => {
 
   const fetchMARData = async () => {
     try {
-      // Get the start of the week for MAR view (last 7 days)
       const startDate = new Date(selectedDate);
-      startDate.setDate(startDate.getDate() - 6); // Last 7 days including today
+      startDate.setDate(startDate.getDate() - 6);
 
       let query = supabase
         .from('medication_schedule')
@@ -198,6 +286,7 @@ const Medication= () => {
           prescription_items!inner(
             drugs!inner(
               drug_name,
+              generic_name,
               dosage
             ),
             prescriptions!inner(
@@ -223,7 +312,6 @@ const Medication= () => {
 
       if (error) throw error;
 
-      // Group by patient and medication for MAR view
       const marGrouped = groupMARData(data || []);
       setMarData(marGrouped);
     } catch (error) {
@@ -242,8 +330,10 @@ const Medication= () => {
           patientId: med.prescription_items.prescriptions.patient_id,
           patientName: `${med.prescription_items.prescriptions.patients.users.first_name} ${med.prescription_items.prescriptions.patients.users.last_name}`,
           medication: med.prescription_items.drugs.drug_name,
+          genericName: med.prescription_items.drugs.generic_name,
           dosage: med.prescription_items.drugs.dosage,
-          administrations: {}
+          administrations: {},
+          expertData: expertSystemResults[med.prescription_items.prescriptions.patient_id]
         };
       }
 
@@ -257,6 +347,30 @@ const Medication= () => {
     });
 
     return Object.values(grouped);
+  };
+
+  // MESMTF Expert System Functions
+  const determineTreatmentPlan = (symptoms) => {
+    const malariaSymptoms = ['Abdominal pain', 'Vomiting', 'Sore throat', 'Headache', 'Fatigue', 'Cough', 'Constipation'];
+    const typhoidSymptoms = ['Abdominal pain', 'Stomach issues', 'Headache', 'Persistent high fever', 'Weakness', 'Tiredness'];
+    
+    const malariaScore = symptoms.filter(symptom => malariaSymptoms.includes(symptom)).length;
+    const typhoidScore = symptoms.filter(symptom => typhoidSymptoms.includes(symptom)).length;
+    
+    if (malariaScore >= 2 && typhoidScore >= 2) {
+      return { disease: 'Malaria & Typhoid Co-infection', drugs: malariaTyphoidDrugs.combined.drugs };
+    } else if (malariaScore > typhoidScore) {
+      return { disease: 'Malaria', drugs: malariaTyphoidDrugs.malaria.drugs };
+    } else if (typhoidScore > malariaScore) {
+      return { disease: 'Typhoid Fever', drugs: malariaTyphoidDrugs.typhoid.drugs };
+    } else {
+      return { disease: 'Undetermined', drugs: ['Symptomatic Treatment'] };
+    }
+  };
+
+  const requiresChestXray = (symptoms) => {
+    const veryStrongSymptoms = ['Abdominal pain', 'Vomiting', 'Sore throat', 'Stomach issues'];
+    return symptoms.some(symptom => veryStrongSymptoms.includes(symptom));
   };
 
   const calculateAge = (dateOfBirth) => {
@@ -285,20 +399,20 @@ const Medication= () => {
 
       if (error) throw error;
 
-      // Also record in drug_administration table for comprehensive tracking
       if (status === 'administered') {
         const med = medicationSchedule.find(m => m.id === medicationId);
         await supabase
           .from('drug_administration')
           .insert({
-            prescription_item_id: medicationId, // This should be the actual prescription_item_id
+            prescription_item_id: medicationId,
             patient_id: med.patientId,
             administered_by: authUser.id,
             scheduled_time: med.scheduledTime.toISOString(),
             actual_time: new Date().toISOString(),
             dosage_administered: med.dosage,
+            administration_route: 'oral', // Default, can be enhanced
             status: 'administered',
-            notes: notes
+            notes: `${notes} | Disease: ${med.disease}`
           });
       }
 
@@ -311,12 +425,6 @@ const Medication= () => {
       console.error('Error updating medication status:', error);
       alert('Error updating medication status');
     }
-  };
-
-  const getTimeSlots = () => {
-    return [
-      '06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'
-    ];
   };
 
   const getStatusIcon = (status) => {
@@ -342,6 +450,15 @@ const Medication= () => {
     return dates;
   };
 
+  const getDiseaseColor = (disease) => {
+    switch (disease.toLowerCase()) {
+      case 'malaria': return 'bg-red-100 text-red-800';
+      case 'typhoid': return 'bg-orange-100 text-orange-800';
+      case 'malaria & typhoid co-infection': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout user={user} navigation={navigation}>
@@ -356,14 +473,31 @@ const Medication= () => {
 
   return (
     <DashboardLayout user={user} navigation={navigation}>
-      {/* Header */}
+      {/* Header with MESMTF Competition Features */}
       <div className="mb-6">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Medication Administration</h1>
-            <p className="text-gray-600">Manage medication schedules and administration records</p>
+            <p className="text-gray-600">MESMTF Expert System - Malaria & Typhoid Fever Treatment</p>
+            <div className="flex items-center space-x-4 mt-2">
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                <BeakerIcon className="h-3 w-3 mr-1" />
+                Expert System Integrated
+              </span>
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <ShieldCheckIcon className="h-3 w-3 mr-1" />
+                MESMTF Compliant
+              </span>
+            </div>
           </div>
           <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setShowDiagnosisPanel(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
+            >
+              <BeakerIcon className="h-4 w-4 mr-2" />
+              Expert System Diagnosis
+            </button>
             <div>
               <label htmlFor="date-select" className="block text-sm font-medium text-gray-700">
                 Date
@@ -379,6 +513,66 @@ const Medication= () => {
           </div>
         </div>
       </div>
+
+      {/* Expert System Diagnosis Panel */}
+      {showDiagnosisPanel && (
+        <div className="mb-6 bg-white p-6 rounded-lg shadow border-2 border-blue-200">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-blue-900">MESMTF Expert System Diagnosis</h3>
+            <button onClick={() => setShowDiagnosisPanel(false)} className="text-gray-500 hover:text-gray-700">
+              ×
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="font-medium mb-2">Patient Symptoms Analysis</h4>
+              <div className="space-y-2">
+                {patientSymptoms.map((symptom, index) => (
+                  <span key={index} className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded mr-2">
+                    {symptom}
+                  </span>
+                ))}
+              </div>
+              
+              <div className="mt-4 p-3 bg-gray-50 rounded">
+                <h5 className="font-medium">Treatment Recommendation</h5>
+                <p className="text-sm text-gray-600">
+                  {determineTreatmentPlan(patientSymptoms).disease}
+                </p>
+                <div className="mt-2">
+                  {determineTreatmentPlan(patientSymptoms).drugs.map((drug, index) => (
+                    <span key={index} className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded mr-2 mb-1">
+                      {drug}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="font-medium mb-2">Diagnostic Requirements</h4>
+              <div className="space-y-3">
+                <div className="flex items-center">
+                  <ExclamationCircleIcon className={`h-5 w-5 mr-2 ${
+                    requiresChestXray(patientSymptoms) ? 'text-red-500' : 'text-green-500'
+                  }`} />
+                  <span>Chest X-ray Required: {requiresChestXray(patientSymptoms) ? 'Yes' : 'No'}</span>
+                </div>
+                
+                <div className="p-3 bg-blue-50 rounded">
+                  <h5 className="font-medium text-sm">MESMTF Guidelines</h5>
+                  <ul className="text-xs text-gray-600 mt-1 space-y-1">
+                    <li>• Very Strong Signs (VSs) require chest X-ray + full treatment</li>
+                    <li>• Strong Signs (Ss) require standard drug administration</li>
+                    <li>• Monitor for drug interactions in co-infections</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Patient Selector and Filters */}
       <div className="mb-6 bg-white p-4 rounded-lg shadow">
@@ -432,53 +626,53 @@ const Medication= () => {
         {/* Today's Schedule Tab */}
         {activeTab === 'schedule' && (
           <div className="space-y-4">
-            {/* Summary Stats */}
+            {/* MESMTF Treatment Summary */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white p-4 rounded-lg shadow border">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Total Scheduled</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {medicationSchedule.length}
-                    </p>
-                  </div>
-                  <ClipboardDocumentListIcon className="h-8 w-8 text-blue-500" />
-                </div>
-              </div>
-
-              <div className="bg-white p-4 rounded-lg shadow border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Administered</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {medicationSchedule.filter(m => m.status === 'administered').length}
-                    </p>
-                  </div>
-                  <CheckCircleIcon className="h-8 w-8 text-green-500" />
-                </div>
-              </div>
-
-              <div className="bg-white p-4 rounded-lg shadow border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Pending</p>
-                    <p className="text-2xl font-bold text-orange-600">
-                      {medicationSchedule.filter(m => m.status === 'scheduled').length}
-                    </p>
-                  </div>
-                  <ClockIcon className="h-8 w-8 text-orange-500" />
-                </div>
-              </div>
-
-              <div className="bg-white p-4 rounded-lg shadow border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Overdue</p>
+                    <p className="text-sm font-medium text-gray-600">Malaria Treatments</p>
                     <p className="text-2xl font-bold text-red-600">
-                      {medicationSchedule.filter(m => m.isOverdue).length}
+                      {medicationSchedule.filter(m => m.disease.toLowerCase().includes('malaria')).length}
                     </p>
                   </div>
-                  <ExclamationTriangleIcon className="h-8 w-8 text-red-500" />
+                  <BeakerIcon className="h-8 w-8 text-red-500" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-lg shadow border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Typhoid Treatments</p>
+                    <p className="text-2xl font-bold text-orange-600">
+                      {medicationSchedule.filter(m => m.disease.toLowerCase().includes('typhoid')).length}
+                    </p>
+                  </div>
+                  <BeakerIcon className="h-8 w-8 text-orange-500" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-lg shadow border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">X-ray Required</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {medicationSchedule.filter(m => m.expertData?.requiresChestXray).length}
+                    </p>
+                  </div>
+                  <ExclamationCircleIcon className="h-8 w-8 text-purple-500" />
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-lg shadow border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Co-infections</p>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {medicationSchedule.filter(m => m.disease.toLowerCase().includes('co-infection')).length}
+                    </p>
+                  </div>
+                  <ShieldCheckIcon className="h-8 w-8 text-purple-500" />
                 </div>
               </div>
             </div>
@@ -489,25 +683,23 @@ const Medication= () => {
                 <h3 className="text-lg font-medium text-gray-900">
                   Medication Schedule for {new Date(selectedDate).toLocaleDateString()}
                 </h3>
+                <p className="text-sm text-gray-600">MESMTF Expert System - Color coded by disease type</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Time
+                        Time & Disease
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Patient
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Medication
+                        Medication & Dosage
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Dosage
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Instructions
+                        Expert System Data
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Status
@@ -524,24 +716,43 @@ const Medication= () => {
                           <div className="text-sm font-medium text-gray-900">
                             {med.scheduledTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getDiseaseColor(med.disease)}`}>
+                            {med.disease}
+                          </span>
                           {med.isOverdue && (
-                            <div className="text-xs text-red-600 font-medium">OVERDUE</div>
+                            <div className="text-xs text-red-600 font-medium mt-1">OVERDUE</div>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{med.patientName}</div>
+                          {med.expertData && (
+                            <div className="text-xs text-gray-500">
+                              M: {med.expertData.malariaProbability}% | T: {med.expertData.typhoidProbability}%
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-gray-900">{med.medication}</div>
-                          <div className="text-xs text-gray-500">{med.form}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {med.dosage}
+                          <div className="text-xs text-gray-500">{med.genericName}</div>
+                          <div className="text-xs text-gray-600">{med.dosage} • {med.form}</div>
+                          <div className="text-xs text-blue-600 mt-1">{med.instructions}</div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm text-gray-900 max-w-xs truncate">
-                            {med.instructions}
-                          </div>
+                          {med.expertData ? (
+                            <div className="space-y-1">
+                              <div className="text-xs">
+                                <span className="font-medium">X-ray: </span>
+                                <span className={med.expertData.requiresChestXray ? 'text-red-600' : 'text-green-600'}>
+                                  {med.expertData.requiresChestXray ? 'Required' : 'Not Required'}
+                                </span>
+                              </div>
+                              <div className="text-xs text-gray-600 truncate max-w-xs">
+                                {med.expertData.recommendation}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">No expert data</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusOptions[med.status]?.color}`}>
@@ -599,6 +810,7 @@ const Medication= () => {
               <h3 className="text-lg font-medium text-gray-900">
                 Medication Administration Record (MAR) - Last 7 Days
               </h3>
+              <p className="text-sm text-gray-600">MESMTF Expert System Tracking</p>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full">
@@ -621,6 +833,11 @@ const Medication= () => {
                         <div className="font-medium text-gray-900">{item.patientName}</div>
                         <div className="text-sm text-gray-600">{item.medication}</div>
                         <div className="text-xs text-gray-500">{item.dosage}</div>
+                        {item.expertData && (
+                          <div className="text-xs text-blue-600 mt-1">
+                            Expert Score: M{item.expertData.malariaProbability}% T{item.expertData.typhoidProbability}%
+                          </div>
+                        )}
                       </td>
                       {marDates.map(date => {
                         const administration = item.administrations[date];
@@ -666,6 +883,18 @@ const Medication= () => {
                     <span>{option.label}</span>
                   </span>
                 ))}
+                <span className="flex items-center space-x-1 ml-4">
+                  <span className="w-3 h-3 bg-red-100 rounded"></span>
+                  <span>Malaria Treatment</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <span className="w-3 h-3 bg-orange-100 rounded"></span>
+                  <span>Typhoid Treatment</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <span className="w-3 h-3 bg-purple-100 rounded"></span>
+                  <span>Co-infection</span>
+                </span>
               </div>
             </div>
           </div>
@@ -684,6 +913,7 @@ const Medication= () => {
               <div className="mb-4 p-3 bg-gray-50 rounded">
                 <p className="font-medium">{administeringMed.patientName}</p>
                 <p className="text-sm text-gray-600">{administeringMed.medication} • {administeringMed.dosage}</p>
+                <p className="text-xs text-gray-500">Disease: {administeringMed.disease}</p>
                 <p className="text-xs text-gray-500">Scheduled: {administeringMed.scheduledTime.toLocaleString()}</p>
               </div>
 
