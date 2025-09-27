@@ -16,7 +16,9 @@ import {
   EyeIcon,
   EyeSlashIcon,
   CalendarIcon,
-  PhoneIcon
+  PhoneIcon,
+  ChartBarIcon,
+  BuildingLibraryIcon
 } from '@heroicons/react/24/outline';
 
 const SymptomChecker = () => {
@@ -29,77 +31,109 @@ const SymptomChecker = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [language, setLanguage] = useState('english');
   const [highContrast, setHighContrast] = useState(false);
+  const [patientInfo, setPatientInfo] = useState(null);
   
   const [riskFactors, setRiskFactors] = useState({
     recentTravel: false,
     endemicArea: false,
     previousHistory: false,
     contactWithSick: false,
+    poorSanitation: false,
+    untreatedWater: false
   });
 
   const { user: authUser } = useAuth();
   const navigate = useNavigate();
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: UserCircleIcon },
-    { name: 'Symptom Checker', href: '/diagnosis', icon: HeartIcon, current: true },
-    { name: 'Medical Records', href: '/medical-records', icon: DocumentTextIcon },
-    { name: 'Appointments', href: '/appointments', icon: CalendarIcon },
-  ];
-
-  // Enhanced Expert System Rules with flexible matching
+      { name: 'Dashboard', href: '/dashboard', icon: UserCircleIcon },
+      { name: 'My Appointments', href: '/appointment', icon: CalendarIcon, current: true },
+      { name: 'Medical Records', href: '/patient-medical-records', icon: EyeIcon },
+      { name: 'Symptom Checker', href: '/diagnosis', icon: MagnifyingGlassIcon },
+    ];
+  // Enhanced Expert System Rules with improved medical accuracy
   const expertSystemRules = {
     malaria: {
-      // Symptom weights based on importance
       symptomWeights: {
-        'Abdominal pain': 4, 'Vomiting': 4, 'Sore throat': 4, // Very Strong
-        'Headache': 3, 'Fatigue': 3, 'Cough': 3, 'Constipation': 3, 'Fever': 3, 'Chills': 3, // Strong
-        'Chest pain': 2, 'Back pain': 2, 'Muscle Pain': 2, // Weak
-        'Diarrhea': 1, 'Sweating': 1, 'Rash': 1, 'Loss of appetite': 1 // Very Weak
+        'Fever': 4, 'Chills': 4, 'Sweating': 4, 'Headache': 3,
+        'Muscle Pain': 3, 'Fatigue': 3, 'Nausea': 3, 'Vomiting': 3,
+        'Abdominal pain': 2, 'Diarrhea': 2, 'Loss of appetite': 2,
+        'Cough': 1, 'Chest pain': 1, 'Back pain': 1
       },
-      // Rules for diagnosis
-      diagnosisThresholds: {
-        high: 12,    // Requires multiple strong/very strong symptoms
-        medium: 8,   // Requires combination of symptoms
-        low: 4       // Basic symptom presence
-      },
+      diagnosisThresholds: { high: 15, medium: 10, low: 6 },
+      criticalSymptoms: ['Fever', 'Chills', 'Sweating'],
       drugs: {
-        high: ["Artemether-Lumefantrine", "Quinine sulfate", "Chloroquine phosphate"],
-        medium: ["Artemether-Lumefantrine", "Primaquine"],
-        low: ["Paracetamol for symptom relief"]
+        high: ["Artemether-Lumefantrine (Coartem)", "Quinine sulfate", "Chloroquine phosphate", "Primaquine"],
+        medium: ["Artemether-Lumefantrine", "Doxycycline", "Clindamycin"],
+        low: ["Paracetamol", "Ibuprofen", "Rest and hydration"]
       },
       messages: {
-        high: "High probability of Malaria - Very strong signs detected. Immediate medical attention + Chest X-ray required.",
-        medium: "Moderate probability of Malaria. Medical consultation recommended + Blood test required.",
-        low: "Low probability of Malaria - Mild symptoms detected. Monitor symptoms and consult if condition worsens."
+        high: "🔴 HIGH PROBABILITY OF MALARIA - Urgent medical attention required! Blood test and immediate treatment needed.",
+        medium: "🟡 MODERATE PROBABILITY OF MALARIA - Medical consultation recommended within 24 hours.",
+        low: "🟢 LOW PROBABILITY OF MALARIA - Monitor symptoms and consult if condition worsens."
       }
     },
     typhoid: {
       symptomWeights: {
-        'Abdominal pain': 4, 'Stomach issues': 4, 'Persistent high fever': 4, // Very Strong
-        'Headache': 3, 'Weakness': 3, // Strong
-        'Tiredness': 2, 'Muscle aches': 2, // Weak
-        'Rash': 1, 'Loss of appetite': 1 // Very Weak
+        'Persistent high fever': 4, 'Abdominal pain': 4, 'Headache': 3,
+        'Weakness': 3, 'Fatigue': 3, 'Muscle aches': 2, 'Sweating': 2,
+        'Dry cough': 2, 'Loss of appetite': 2, 'Weight loss': 2,
+        'Stomach issues': 3, 'Diarrhea': 2, 'Constipation': 2,
+        'Rash': 1, 'Confusion': 3
       },
-      diagnosisThresholds: {
-        high: 10,
-        medium: 6,
-        low: 3
-      },
+      diagnosisThresholds: { high: 14, medium: 9, low: 5 },
+      criticalSymptoms: ['Persistent high fever', 'Abdominal pain', 'Confusion'],
       drugs: {
-        high: ["Ciprofloxacin", "Azithromycin", "Ceftriaxone"],
-        medium: ["Ciprofloxacin", "Amoxicillin"],
-        low: ["Antipyretics for fever management"]
+        high: ["Ciprofloxacin", "Azithromycin", "Ceftriaxone", "Ofloxacin"],
+        medium: ["Ciprofloxacin", "Amoxicillin", "Trimethoprim-sulfamethoxazole"],
+        low: ["Antipyretics", "Fluid replacement", "Rest"]
       },
       messages: {
-        high: "High probability of Typhoid Fever - Very strong signs detected. Urgent medical attention + Chest X-ray required.",
-        medium: "Moderate probability of Typhoid Fever. Medical evaluation recommended.",
-        low: "Low probability of Typhoid Fever - General symptoms detected. Rest and hydration recommended."
+        high: "🔴 HIGH PROBABILITY OF TYPHOID FEVER - Emergency medical care required! Blood culture and stool test needed.",
+        medium: "🟡 MODERATE PROBABILITY OF TYPHOID FEVER - Urgent medical evaluation recommended.",
+        low: "🟢 LOW PROBABILITY OF TYPHOID FEVER - Symptomatic treatment and monitoring advised."
       }
     }
   };
 
-  // Get all symptoms from both diseases
+  useEffect(() => {
+    if (authUser) {
+      fetchPatientInfo();
+    }
+  }, [authUser]);
+
+  const fetchPatientInfo = async () => {
+    try {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+      
+      if (userData) {
+        setPatientInfo({
+          name: `${userData.first_name} ${userData.last_name}`,
+          age: userData.date_of_birth ? calculateAge(userData.date_of_birth) : null,
+          gender: userData.gender || 'Not specified'
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching patient info:', error);
+    }
+  };
+
+  const calculateAge = (dateOfBirth) => {
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   const getAllSymptoms = () => {
     const allSymptoms = new Set();
     Object.values(expertSystemRules).forEach(disease => {
@@ -110,97 +144,101 @@ const SymptomChecker = () => {
     return Array.from(allSymptoms).sort();
   };
 
-  // Enhanced diagnosis function with dynamic scoring
   const diagnose = async () => {
     setIsLoading(true);
     
     try {
-      const diseaseResults = [];
+      // Simulate AI processing time
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Calculate scores for each disease
+      const diseaseResults = [];
+      let totalSymptomsScore = selectedSymptoms.length * 2;
+      
       Object.entries(expertSystemRules).forEach(([disease, rules]) => {
         let totalScore = 0;
         const matchingSymptoms = [];
-        
-        // Calculate score based on selected symptoms and their weights
+        let criticalSymptomsCount = 0;
+
         selectedSymptoms.forEach(symptom => {
           if (rules.symptomWeights[symptom]) {
             let symptomWeight = rules.symptomWeights[symptom];
             
-            // Adjust weight based on severity
-            if (symptomSeverity[symptom] === 'severe') {
-              symptomWeight *= 1.5;
-            } else if (symptomSeverity[symptom] === 'mild') {
-              symptomWeight *= 0.7;
-            }
+            // Severity multiplier
+            if (symptomSeverity[symptom] === 'severe') symptomWeight *= 2;
+            else if (symptomSeverity[symptom] === 'moderate') symptomWeight *= 1.5;
             
-            // Adjust weight based on duration
-            if (symptomDuration[symptom] === 'prolonged') {
-              symptomWeight *= 1.3;
-            } else if (symptomDuration[symptom] === 'recent') {
-              symptomWeight *= 0.8;
-            }
+            // Duration multiplier
+            if (symptomDuration[symptom] === 'prolonged') symptomWeight *= 1.8;
+            else if (symptomDuration[symptom] === 'days') symptomWeight *= 1.3;
             
             totalScore += symptomWeight;
             matchingSymptoms.push(symptom);
+            
+            if (rules.criticalSymptoms.includes(symptom)) {
+              criticalSymptomsCount++;
+            }
           }
         });
 
-        // Apply risk factor multipliers
-        if (riskFactors.recentTravel || riskFactors.endemicArea) {
-          totalScore *= 1.4;
-        }
-        if (riskFactors.previousHistory) {
-          totalScore *= 1.3;
-        }
-        if (riskFactors.contactWithSick) {
-          totalScore *= 1.2;
+        // Risk factor multipliers
+        let riskMultiplier = 1;
+        if (riskFactors.recentTravel) riskMultiplier *= 1.6;
+        if (riskFactors.endemicArea) riskMultiplier *= 1.5;
+        if (riskFactors.previousHistory) riskMultiplier *= 1.4;
+        if (riskFactors.contactWithSick) riskMultiplier *= 1.3;
+        if (riskFactors.poorSanitation) riskMultiplier *= 1.2;
+        if (riskFactors.untreatedWater) riskMultiplier *= 1.3;
+
+        totalScore *= riskMultiplier;
+
+        // Age factor (children and elderly are higher risk)
+        if (patientInfo?.age) {
+          if (patientInfo.age < 5 || patientInfo.age > 65) {
+            totalScore *= 1.3;
+          }
         }
 
         // Determine confidence level
         let confidenceLevel = 'low';
         let confidencePercentage = 0;
         
-        if (totalScore >= rules.diagnosisThresholds.high) {
+        if (totalScore >= rules.diagnosisThresholds.high || criticalSymptomsCount >= 2) {
           confidenceLevel = 'high';
-          confidencePercentage = Math.min(95, 60 + (totalScore - rules.diagnosisThresholds.high) * 5);
-        } else if (totalScore >= rules.diagnosisThresholds.medium) {
+          confidencePercentage = Math.min(95, 70 + (totalScore - rules.diagnosisThresholds.high));
+        } else if (totalScore >= rules.diagnosisThresholds.medium || criticalSymptomsCount >= 1) {
           confidenceLevel = 'medium';
-          confidencePercentage = Math.min(75, 40 + (totalScore - rules.diagnosisThresholds.medium) * 7);
+          confidencePercentage = Math.min(80, 50 + (totalScore - rules.diagnosisThresholds.medium) * 3);
         } else if (totalScore >= rules.diagnosisThresholds.low) {
           confidenceLevel = 'low';
-          confidencePercentage = Math.min(40, 20 + (totalScore - rules.diagnosisThresholds.low) * 10);
+          confidencePercentage = Math.min(50, 30 + (totalScore - rules.diagnosisThresholds.low) * 4);
         }
 
-        // Only include if there's some probability
-        if (confidencePercentage > 15) {
-          const requiresChestXRay = matchingSymptoms.some(symptom => 
-            ['Abdominal pain', 'Vomiting', 'Sore throat', 'Stomach issues', 'Persistent high fever']
-            .includes(symptom) && symptomSeverity[symptom] === 'severe'
-          );
-
+        if (confidencePercentage > 20) {
+          const requiresLabTests = confidenceLevel === 'high' || criticalSymptomsCount > 0;
+          
           diseaseResults.push({
             disease: disease.charAt(0).toUpperCase() + disease.slice(1),
             confidence: Math.round(confidencePercentage),
             confidenceLevel: confidenceLevel,
             message: rules.messages[confidenceLevel],
-            action: confidenceLevel === 'high' ? 'Urgent medical attention required' : 
-                   confidenceLevel === 'medium' ? 'Medical consultation recommended' : 'Monitor symptoms',
+            action: confidenceLevel === 'high' ? '🚨 URGENT MEDICAL ATTENTION REQUIRED' : 
+                   confidenceLevel === 'medium' ? '⚠️ MEDICAL CONSULTATION RECOMMENDED' : '📋 MONITOR AND CONSULT IF NEEDED',
             recommendedDrugs: rules.drugs[confidenceLevel],
-            requiresChestXRay: requiresChestXRay,
+            requiresLabTests: requiresLabTests,
             matchingSymptoms: matchingSymptoms,
+            criticalSymptomsCount: criticalSymptomsCount,
             totalScore: Math.round(totalScore * 10) / 10,
             riskFactors: riskFactors
           });
         }
       });
 
-      // Sort by confidence
+      // Sort by confidence (highest first)
       diseaseResults.sort((a, b) => b.confidence - a.confidence);
 
       // Save to database
-      if (authUser && diseaseResults.length > 0) {
-        await supabase
+      if (authUser) {
+        const { data: session } = await supabase
           .from('diagnosis_sessions')
           .insert({
             patient_id: authUser.id,
@@ -211,9 +249,24 @@ const SymptomChecker = () => {
             results: diseaseResults,
             top_diagnosis: diseaseResults[0]?.disease,
             confidence_level: diseaseResults[0]?.confidence,
-            requires_chest_xray: diseaseResults.some(result => result.requiresChestXRay),
+            requires_lab_tests: diseaseResults.some(result => result.requiresLabTests),
             created_at: new Date().toISOString()
-          });
+          })
+          .select()
+          .single();
+
+        // Link symptoms to diagnosis session
+        if (session && selectedSymptoms.length > 0) {
+          const symptomRecords = selectedSymptoms.map(symptomName => ({
+            diagnosis_session_id: session.id,
+            symptom_name: symptomName,
+            severity: symptomSeverity[symptomName],
+            duration: symptomDuration[symptomName],
+            created_at: new Date().toISOString()
+          }));
+
+          await supabase.from('diagnosis_session_symptoms').insert(symptomRecords);
+        }
       }
 
       setDiagnosisResult(diseaseResults);
@@ -221,20 +274,20 @@ const SymptomChecker = () => {
 
     } catch (error) {
       console.error('Diagnosis error:', error);
-      // Fallback to basic results if database fails
-      const fallbackResults = selectedSymptoms.length > 0 ? [
+      // Fallback results
+      const fallbackResults = [
         {
-          disease: 'Malaria',
-          confidence: Math.min(80, selectedSymptoms.length * 15),
+          disease: 'Medical Evaluation Needed',
+          confidence: 85,
           confidenceLevel: 'medium',
-          message: 'Symptoms analysis completed. Please consult healthcare professional.',
-          action: 'Further evaluation recommended',
-          recommendedDrugs: ['Basic symptomatic treatment'],
-          requiresChestXRay: false,
+          message: 'Based on your symptoms, professional medical evaluation is strongly recommended.',
+          action: 'Consult healthcare provider for accurate diagnosis',
+          recommendedDrugs: ['Symptomatic treatment only until diagnosis'],
+          requiresLabTests: true,
           matchingSymptoms: selectedSymptoms,
-          totalScore: selectedSymptoms.length * 2
+          totalScore: selectedSymptoms.length * 3
         }
-      ] : [];
+      ];
       
       setDiagnosisResult(fallbackResults);
       setCurrentStep(3);
@@ -270,15 +323,17 @@ const SymptomChecker = () => {
       endemicArea: false,
       previousHistory: false,
       contactWithSick: false,
+      poorSanitation: false,
+      untreatedWater: false
     });
   };
 
   const downloadReport = () => {
     const report = {
-      patient: authUser?.email || 'Guest',
+      patient: patientInfo || { name: authUser?.email || 'Guest' },
       date: new Date().toLocaleDateString(),
       time: new Date().toLocaleTimeString(),
-      system: "MESMTF - Medical Expert System for Malaria and Typhoid Fever",
+      system: "MESMTF AI Medical Expert System v2.0",
       symptoms: selectedSymptoms.map(symptom => ({
         symptom,
         severity: symptomSeverity[symptom] || 'Not specified',
@@ -286,15 +341,15 @@ const SymptomChecker = () => {
       })),
       riskFactors,
       diagnosisResults: diagnosisResult,
-      expertSystemVersion: "1.0",
-      disclaimer: "This report is generated by an expert system for preliminary assessment only. Always consult a healthcare professional for accurate diagnosis and treatment."
+      expertSystemRules: "Weighted scoring system with risk factor analysis",
+      disclaimer: "⚠️ AI-PRELIMINARY ASSESSMENT ONLY - This report is generated by an expert system for initial evaluation. Always consult qualified healthcare professionals for accurate diagnosis and treatment."
     };
 
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mesmtf-diagnosis-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `mesmtf-diagnosis-${new Date().toISOString().split('T')[0]}-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -303,10 +358,10 @@ const SymptomChecker = () => {
     navigate('/appointment', {
       state: {
         prefill: {
-          reason: `MESMTF Preliminary Diagnosis: Possible ${disease}`,
+          reason: `MESMTF AI Diagnosis: Suspected ${disease} (${diagnosisResult[0]?.confidence}% confidence)`,
           symptoms: selectedSymptoms,
-          urgency: diagnosisResult[0]?.confidence >= 70 ? 'urgent' : 'standard',
-          preferredSpecialty: disease.toLowerCase(),
+          urgency: diagnosisResult[0]?.confidenceLevel === 'high' ? 'urgent' : 'standard',
+          preferredSpecialty: disease.toLowerCase().includes('malaria') ? 'Infectious Disease' : 'General Medicine',
           confidenceLevel: diagnosisResult[0]?.confidence
         }
       }
@@ -315,24 +370,18 @@ const SymptomChecker = () => {
 
   const allSymptoms = getAllSymptoms();
 
-  // Group symptoms by category for display
   const getSymptomsByCategory = () => {
-    const categories = {
-      veryStrong: [],
-      strong: [],
-      weak: [],
-      veryWeak: []
-    };
+    const categories = { critical: [], high: [], medium: [], low: [] };
 
     allSymptoms.forEach(symptom => {
       const malariaWeight = expertSystemRules.malaria.symptomWeights[symptom];
       const typhoidWeight = expertSystemRules.typhoid.symptomWeights[symptom];
       const maxWeight = Math.max(malariaWeight || 0, typhoidWeight || 0);
       
-      if (maxWeight === 4) categories.veryStrong.push(symptom);
-      else if (maxWeight === 3) categories.strong.push(symptom);
-      else if (maxWeight === 2) categories.weak.push(symptom);
-      else if (maxWeight === 1) categories.veryWeak.push(symptom);
+      if (maxWeight === 4) categories.critical.push(symptom);
+      else if (maxWeight === 3) categories.high.push(symptom);
+      else if (maxWeight === 2) categories.medium.push(symptom);
+      else if (maxWeight === 1) categories.low.push(symptom);
     });
 
     return categories;
@@ -354,6 +403,8 @@ const SymptomChecker = () => {
                 className={`px-3 py-2 rounded-lg border ${highContrast ? 'bg-gray-800 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
               >
                 <option value="english">English</option>
+                <option value="spanish">Spanish</option>
+                <option value="french">French</option>
               </select>
               
               <button
@@ -367,19 +418,19 @@ const SymptomChecker = () => {
 
             <button
               onClick={() => navigate('/emergency')}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center font-semibold"
             >
               <PhoneIcon className="h-4 w-4 mr-2" />
-              Emergency Help
+              🚨 Emergency Help
             </button>
           </div>
 
           {/* Emergency Warning Banner */}
-          <div className="bg-red-600 text-white p-4 rounded-lg mb-8">
+          <div className="bg-red-600 text-white p-4 rounded-lg mb-8 border-2 border-red-700">
             <div className="flex items-center">
               <ExclamationTriangleIcon className="h-6 w-6 mr-3" />
               <div className="text-sm">
-                <strong>EMERGENCY WARNING:</strong> If experiencing severe symptoms like difficulty breathing, chest pain, or confusion, seek immediate medical help!
+                <strong>EMERGENCY WARNING:</strong> If experiencing severe symptoms like difficulty breathing, chest pain, confusion, or high fever (≥39°C), seek immediate medical help! Call emergency services.
               </div>
             </div>
           </div>
@@ -391,11 +442,11 @@ const SymptomChecker = () => {
                 <HeartIcon className="h-8 w-8 text-white" />
               </div>
               <div>
-                <h1 className={`text-3xl font-bold ${highContrast ? 'text-white' : 'text-gray-900'}`}>
-                  Medical Expert System for Malaria and Typhoid Fever
+                <h1 className={`text-4xl font-bold ${highContrast ? 'text-white' : 'text-gray-900'}`}>
+                  AI Medical Expert System
                 </h1>
                 <p className={`text-lg ${highContrast ? 'text-gray-300' : 'text-gray-600'}`}>
-                  Rule-Based Diagnosis System (MESMTF)
+                  Malaria & Typhoid Fever Diagnosis with Intelligent Risk Assessment
                 </p>
               </div>
             </div>
@@ -406,14 +457,14 @@ const SymptomChecker = () => {
             <div className="flex items-center space-x-4">
               {[1, 2, 3].map((step) => (
                 <div key={step} className="flex items-center">
-                  <div className={`flex items-center justify-center w-12 h-12 rounded-full border-2 ${
+                  <div className={`flex items-center justify-center w-12 h-12 rounded-full border-2 font-semibold ${
                     step === currentStep
                       ? 'bg-blue-600 border-blue-600 text-white'
                       : step < currentStep
                       ? 'bg-green-500 border-green-500 text-white'
                       : highContrast ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-white border-gray-300 text-gray-500'
                   }`}>
-                    {step}
+                    {step === 1 ? '🤒' : step === 2 ? '🔍' : '📊'}
                   </div>
                   {step < 3 && (
                     <div className={`w-16 h-1 ${step < currentStep ? 'bg-green-500' : highContrast ? 'bg-gray-600' : 'bg-gray-300'}`}></div>
@@ -423,97 +474,28 @@ const SymptomChecker = () => {
             </div>
           </div>
 
+          <div className="flex justify-center text-sm text-gray-600 mb-8">
+            <span className={currentStep >= 1 ? 'text-blue-600 font-medium' : ''}>Symptom Selection</span>
+            <span className={`mx-8 ${currentStep >= 2 ? 'text-blue-600 font-medium' : ''}`}>Risk Assessment</span>
+            <span className={currentStep >= 3 ? 'text-blue-600 font-medium' : ''}>AI Diagnosis Results</span>
+          </div>
+
           {/* Step 1: Symptom Selection */}
           {currentStep === 1 && (
-            <div className={`rounded-2xl shadow-xl p-6 ${highContrast ? 'bg-gray-800 text-white' : 'bg-white'}`}>
-              <h2 className="text-2xl font-bold mb-4">Symptom Selection</h2>
-              
-              <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-yellow-800 text-sm">
-                  <InformationCircleIcon className="h-4 w-4 inline mr-1" />
-                  <strong>Expert System Note:</strong> Very Strong signs require Chest X-ray in addition to drug administration.
-                </p>
-              </div>
-
-              {/* Search */}
-              <div className="mb-6">
-                <div className="relative">
-                  <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search symptoms..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      highContrast ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              {/* Symptom Categories */}
-              <div className="space-y-6">
-                {Object.entries({
-                  veryStrong: "Very Strong Signs (Require Chest X-ray)",
-                  strong: "Strong Signs", 
-                  weak: "Weak Signs",
-                  veryWeak: "Very Weak Signs"
-                }).map(([key, categoryName]) => (
-                  <div key={key} className={`border rounded-lg p-4 ${highContrast ? 'border-gray-600' : 'border-gray-200'}`}>
-                    <h3 className="text-lg font-semibold mb-3 flex items-center">
-                      <span className={`w-3 h-3 rounded-full mr-2 ${
-                        key === 'veryStrong' ? 'bg-red-500' :
-                        key === 'strong' ? 'bg-orange-500' :
-                        key === 'weak' ? 'bg-yellow-500' : 'bg-blue-500'
-                      }`}></span>
-                      {categoryName}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {symptomsByCategory[key]
-                        .filter(symptom => 
-                          symptom.toLowerCase().includes(searchTerm.toLowerCase())
-                        )
-                        .map(symptom => (
-                          <SymptomCard
-                            key={symptom}
-                            symptom={symptom}
-                            isSelected={selectedSymptoms.includes(symptom)}
-                            severity={symptomSeverity[symptom]}
-                            duration={symptomDuration[symptom]}
-                            onToggle={() => toggleSymptom(symptom)}
-                            onSeverityChange={(severity) => setSymptomSeverityLevel(symptom, severity)}
-                            onDurationChange={(duration) => setSymptomDurationLevel(symptom, duration)}
-                            highContrast={highContrast}
-                          />
-                        ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-between mt-8">
-                <button
-                  onClick={resetDiagnosis}
-                  className={`px-6 py-3 font-medium rounded-lg flex items-center ${
-                    highContrast ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                >
-                  <ArrowPathIcon className="h-4 w-4 mr-2" />
-                  Reset All
-                </button>
-                <button
-                  onClick={() => setCurrentStep(2)}
-                  disabled={selectedSymptoms.length === 0}
-                  className={`px-6 py-3 rounded-lg font-medium text-white ${
-                    selectedSymptoms.length === 0
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                >
-                  Continue to Risk Assessment ({selectedSymptoms.length} symptoms)
-                </button>
-              </div>
-            </div>
+            <SymptomSelectionStep
+              symptomsByCategory={symptomsByCategory}
+              selectedSymptoms={selectedSymptoms}
+              symptomSeverity={symptomSeverity}
+              symptomDuration={symptomDuration}
+              searchTerm={searchTerm}
+              highContrast={highContrast}
+              onSearchChange={setSearchTerm}
+              onSymptomToggle={toggleSymptom}
+              onSeverityChange={setSymptomSeverityLevel}
+              onDurationChange={setSymptomDurationLevel}
+              onNext={() => setCurrentStep(2)}
+              onReset={resetDiagnosis}
+            />
           )}
 
           {/* Step 2: Risk Assessment */}
@@ -523,6 +505,7 @@ const SymptomChecker = () => {
               setRiskFactors={setRiskFactors}
               selectedSymptoms={selectedSymptoms}
               symptomSeverity={symptomSeverity}
+              patientInfo={patientInfo}
               highContrast={highContrast}
               onBack={() => setCurrentStep(1)}
               onAnalyze={diagnose}
@@ -535,50 +518,178 @@ const SymptomChecker = () => {
             <ResultsStep
               results={diagnosisResult}
               riskFactors={riskFactors}
+              patientInfo={patientInfo}
               highContrast={highContrast}
               onBookAppointment={bookAppointment}
               onNewDiagnosis={resetDiagnosis}
               onDownloadReport={downloadReport}
             />
           )}
-
         </div>
       </div>
     </DashboardLayout>
   );
 };
 
-// Symptom Card Component (keep this the same as before)
-const SymptomCard = ({ symptom, isSelected, severity, duration, onToggle, onSeverityChange, onDurationChange, highContrast }) => (
-  <div className={`p-3 rounded-lg border transition-all duration-200 ${
-    isSelected
-      ? highContrast ? 'bg-blue-900 border-blue-700' : 'bg-blue-50 border-blue-500'
-      : highContrast ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
-  }`}>
-    <div className="flex items-center justify-between mb-2">
+// Enhanced Symptom Selection Step Component
+const SymptomSelectionStep = ({ 
+  symptomsByCategory, selectedSymptoms, symptomSeverity, symptomDuration, 
+  searchTerm, highContrast, onSearchChange, onSymptomToggle, onSeverityChange, 
+  onDurationChange, onNext, onReset 
+}) => (
+  <div className={`rounded-2xl shadow-xl p-6 ${highContrast ? 'bg-gray-800 text-white' : 'bg-white'}`}>
+    <h2 className="text-2xl font-bold mb-4">Step 1: Select Your Symptoms</h2>
+    
+    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <p className="text-blue-800 text-sm">
+        <InformationCircleIcon className="h-4 w-4 inline mr-1" />
+        <strong>AI System Guidance:</strong> Select all symptoms you're experiencing. Rate severity and duration for more accurate diagnosis.
+      </p>
+    </div>
+
+    {/* Search */}
+    <div className="mb-6">
+      <div className="relative">
+        <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        <input
+          type="text"
+          placeholder="🔍 Search symptoms (fever, headache, pain...)"
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+            highContrast ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300'
+          }`}
+        />
+      </div>
+    </div>
+
+    {/* Symptom Statistics */}
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className={`text-center p-3 rounded-lg ${highContrast ? 'bg-gray-700' : 'bg-gray-100'}`}>
+        <div className="text-2xl font-bold text-blue-600">{selectedSymptoms.length}</div>
+        <div className="text-sm">Symptoms Selected</div>
+      </div>
+      <div className={`text-center p-3 rounded-lg ${highContrast ? 'bg-gray-700' : 'bg-gray-100'}`}>
+        <div className="text-2xl font-bold text-green-600">
+          {Object.values(symptomSeverity).filter(s => s === 'severe').length}
+        </div>
+        <div className="text-sm">Severe Symptoms</div>
+      </div>
+      <div className={`text-center p-3 rounded-lg ${highContrast ? 'bg-gray-700' : 'bg-gray-100'}`}>
+        <div className="text-2xl font-bold text-orange-600">
+          {Object.values(symptomDuration).filter(d => d === 'prolonged').length}
+        </div>
+        <div className="text-sm">Prolonged</div>
+      </div>
+      <div className={`text-center p-3 rounded-lg ${highContrast ? 'bg-gray-700' : 'bg-gray-100'}`}>
+        <div className="text-2xl font-bold text-purple-600">
+          {symptomsByCategory.critical.filter(s => selectedSymptoms.includes(s)).length}
+        </div>
+        <div className="text-sm">Critical Signs</div>
+      </div>
+    </div>
+
+    {/* Symptom Categories */}
+    <div className="space-y-6">
+      {Object.entries({
+        critical: "🚨 Critical Signs (Require Immediate Attention)",
+        high: "⚠️ Strong Indicators", 
+        medium: "📋 Moderate Symptoms",
+        low: "ℹ️ General Symptoms"
+      }).map(([key, categoryName]) => (
+        <div key={key} className={`border-2 rounded-lg p-4 ${
+          highContrast ? 'border-gray-600' : 
+          key === 'critical' ? 'border-red-300 bg-red-50' :
+          key === 'high' ? 'border-orange-300 bg-orange-50' :
+          key === 'medium' ? 'border-yellow-300 bg-yellow-50' : 'border-blue-300 bg-blue-50'
+        }`}>
+          <h3 className="text-lg font-semibold mb-3 flex items-center">
+            <span className={`w-3 h-3 rounded-full mr-2 ${
+              key === 'critical' ? 'bg-red-500' :
+              key === 'high' ? 'bg-orange-500' :
+              key === 'medium' ? 'bg-yellow-500' : 'bg-blue-500'
+            }`}></span>
+            {categoryName}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {symptomsByCategory[key]
+              .filter(symptom => 
+                symptom.toLowerCase().includes(searchTerm.toLowerCase())
+              )
+              .map(symptom => (
+                <SymptomCard
+                  key={symptom}
+                  symptom={symptom}
+                  isSelected={selectedSymptoms.includes(symptom)}
+                  severity={symptomSeverity[symptom]}
+                  duration={symptomDuration[symptom]}
+                  onToggle={() => onSymptomToggle(symptom)}
+                  onSeverityChange={(severity) => onSeverityChange(symptom, severity)}
+                  onDurationChange={(duration) => onDurationChange(symptom, duration)}
+                  highContrast={highContrast}
+                  category={key}
+                />
+              ))}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div className="flex justify-between mt-8">
       <button
-        onClick={onToggle}
-        className="flex-1 text-left"
+        onClick={onReset}
+        className={`px-6 py-3 font-medium rounded-lg flex items-center ${
+          highContrast ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+        }`}
       >
-        <span className={`font-medium ${isSelected ? 'text-blue-700' : ''}`}>
-          {symptom}
-        </span>
+        <ArrowPathIcon className="h-4 w-4 mr-2" />
+        Reset All
       </button>
+      <button
+        onClick={onNext}
+        disabled={selectedSymptoms.length === 0}
+        className={`px-6 py-3 rounded-lg font-medium text-white ${
+          selectedSymptoms.length === 0
+            ? 'bg-gray-400 cursor-not-allowed'
+            : 'bg-blue-600 hover:bg-blue-700'
+        }`}
+      >
+        Continue to Risk Assessment ({selectedSymptoms.length} symptoms selected)
+      </button>
+    </div>
+  </div>
+);
+
+// Enhanced Symptom Card Component
+const SymptomCard = ({ symptom, isSelected, severity, duration, onToggle, onSeverityChange, onDurationChange, highContrast, category }) => (
+  <div className={`p-3 rounded-lg border-2 transition-all duration-200 cursor-pointer ${
+    isSelected
+      ? highContrast ? 'bg-blue-900 border-blue-500' : 
+        category === 'critical' ? 'bg-red-100 border-red-400' :
+        category === 'high' ? 'bg-orange-100 border-orange-400' :
+        category === 'medium' ? 'bg-yellow-100 border-yellow-400' : 'bg-blue-100 border-blue-400'
+      : highContrast ? 'bg-gray-700 border-gray-600 hover:border-gray-400' : 'bg-white border-gray-200 hover:border-gray-300'
+  }`} onClick={onToggle}>
+    <div className="flex items-center justify-between mb-2">
+      <span className={`font-medium ${isSelected ? 'text-blue-700 font-semibold' : ''}`}>
+        {symptom}
+      </span>
       {isSelected && <CheckCircleIcon className="h-5 w-5 text-green-500" />}
     </div>
 
     {isSelected && (
-      <div className="space-y-2 mt-2">
+      <div className="space-y-2 mt-2" onClick={e => e.stopPropagation()}>
         <div>
           <label className="text-sm font-medium">Severity:</label>
-          <div className="flex space-x-2 mt-1">
+          <div className="flex space-x-1 mt-1">
             {['mild', 'moderate', 'severe'].map(level => (
               <button
                 key={level}
                 onClick={() => onSeverityChange(level)}
-                className={`px-2 py-1 text-xs rounded capitalize ${
+                className={`px-2 py-1 text-xs rounded capitalize flex-1 ${
                   severity === level
-                    ? 'bg-blue-600 text-white'
+                    ? level === 'severe' ? 'bg-red-600 text-white' :
+                      level === 'moderate' ? 'bg-orange-500 text-white' : 'bg-green-500 text-white'
                     : highContrast ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-700'
                 }`}
               >
@@ -596,6 +707,7 @@ const SymptomCard = ({ symptom, isSelected, severity, duration, onToggle, onSeve
             className={`w-full mt-1 text-sm p-1 rounded border ${
               highContrast ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'
             }`}
+            onClick={e => e.stopPropagation()}
           >
             <option value="">Select duration</option>
             <option value="recent">Recent (hours)</option>
@@ -608,49 +720,83 @@ const SymptomCard = ({ symptom, isSelected, severity, duration, onToggle, onSeve
   </div>
 );
 
-// Risk Assessment Step Component (keep this the same as before)
-const RiskAssessmentStep = ({ riskFactors, setRiskFactors, selectedSymptoms, symptomSeverity, highContrast, onBack, onAnalyze, isLoading }) => (
+// Enhanced Risk Assessment Step Component
+const RiskAssessmentStep = ({ riskFactors, setRiskFactors, selectedSymptoms, symptomSeverity, patientInfo, highContrast, onBack, onAnalyze, isLoading }) => (
   <div className={`rounded-2xl shadow-xl p-6 ${highContrast ? 'bg-gray-800 text-white' : 'bg-white'}`}>
-    <h2 className="text-2xl font-bold mb-4">Risk Factors Assessment</h2>
+    <h2 className="text-2xl font-bold mb-4">Step 2: Risk Factors & Patient Profile</h2>
     
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-      <div>
-        <h3 className="font-semibold mb-3">Travel & Medical History</h3>
-        {[
-          { key: 'recentTravel', label: 'Recent travel to malaria/typhoid endemic areas' },
-          { key: 'endemicArea', label: 'Live in or recently visited endemic area' },
-          { key: 'contactWithSick', label: 'Close contact with sick individuals' },
-          { key: 'previousHistory', label: 'Previous history of malaria/typhoid' }
-        ].map(factor => (
-          <label key={factor.key} className="flex items-center mb-3">
-            <input
-              type="checkbox"
-              checked={riskFactors[factor.key]}
-              onChange={(e) => setRiskFactors(prev => ({
-                ...prev,
-                [factor.key]: e.target.checked
-              }))}
-              className="mr-3"
-            />
-            {factor.label}
-          </label>
-        ))}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      {/* Patient Information */}
+      <div className={`p-4 rounded-lg ${highContrast ? 'bg-gray-700' : 'bg-blue-50 border border-blue-200'}`}>
+        <h3 className="font-semibold mb-3 flex items-center">
+          <UserCircleIcon className="h-5 w-5 mr-2" />
+          Patient Profile
+        </h3>
+        {patientInfo ? (
+          <div className="space-y-2 text-sm">
+            <div><strong>Name:</strong> {patientInfo.name}</div>
+            <div><strong>Age:</strong> {patientInfo.age || 'Not specified'}</div>
+            <div><strong>Gender:</strong> {patientInfo.gender}</div>
+          </div>
+        ) : (
+          <p className="text-sm opacity-75">Loading patient information...</p>
+        )}
       </div>
 
-      <div>
-        <h3 className="font-semibold mb-3">Selected Symptoms Summary</h3>
-        <div className="space-y-2 max-h-60 overflow-y-auto">
-          {selectedSymptoms.map(symptom => (
-            <div key={symptom} className={`flex justify-between items-center p-2 rounded ${
-              highContrast ? 'bg-gray-700' : 'bg-gray-50'
+      {/* Risk Factors */}
+      <div className="lg:col-span-2">
+        <h3 className="font-semibold mb-3">Risk Factors Assessment</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { key: 'recentTravel', label: '🛩️ Recent travel to endemic areas', description: 'Traveled to malaria/typhoid regions in past month' },
+            { key: 'endemicArea', label: '🏠 Live in endemic area', description: 'Reside in or frequently visit high-risk regions' },
+            { key: 'contactWithSick', label: '👥 Contact with sick individuals', description: 'Close contact with diagnosed patients' },
+            { key: 'previousHistory', label: '📋 Previous disease history', description: 'Had malaria/typhoid before' },
+            { key: 'poorSanitation', label: '🧼 Poor sanitation conditions', description: 'Limited access to clean facilities' },
+            { key: 'untreatedWater', label: '💧 Untreated water source', description: 'Drink from unsafe water sources' }
+          ].map(factor => (
+            <label key={factor.key} className={`flex items-start p-3 rounded-lg cursor-pointer transition-colors ${
+              riskFactors[factor.key] 
+                ? highContrast ? 'bg-blue-900' : 'bg-blue-100 border border-blue-300'
+                : highContrast ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
             }`}>
-              <span>{symptom}</span>
-              <span className="text-sm opacity-75 capitalize">
-                {symptomSeverity[symptom] || 'Not rated'}
-              </span>
-            </div>
+              <input
+                type="checkbox"
+                checked={riskFactors[factor.key]}
+                onChange={(e) => setRiskFactors(prev => ({
+                  ...prev,
+                  [factor.key]: e.target.checked
+                }))}
+                className="mr-3 mt-1"
+              />
+              <div>
+                <div className="font-medium">{factor.label}</div>
+                <div className="text-xs opacity-75 mt-1">{factor.description}</div>
+              </div>
+            </label>
           ))}
         </div>
+      </div>
+    </div>
+
+    {/* Symptoms Summary */}
+    <div className={`p-4 rounded-lg mb-6 ${highContrast ? 'bg-gray-700' : 'bg-gray-50 border'}`}>
+      <h3 className="font-semibold mb-3">Selected Symptoms Summary</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        {selectedSymptoms.map(symptom => (
+          <div key={symptom} className={`flex justify-between items-center p-2 rounded text-sm ${
+            highContrast ? 'bg-gray-600' : 'bg-white border'
+          }`}>
+            <span>{symptom}</span>
+            <span className={`px-2 py-1 rounded text-xs ${
+              symptomSeverity[symptom] === 'severe' ? 'bg-red-100 text-red-800' :
+              symptomSeverity[symptom] === 'moderate' ? 'bg-orange-100 text-orange-800' :
+              'bg-green-100 text-green-800'
+            }`}>
+              {symptomSeverity[symptom] || 'Not rated'}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
 
@@ -659,26 +805,26 @@ const RiskAssessmentStep = ({ riskFactors, setRiskFactors, selectedSymptoms, sym
         onClick={onBack}
         className={`px-6 py-3 border rounded-lg font-medium ${
           highContrast 
-            ? 'border-gray-600 text-gray-300 hover:border-gray-400' 
+            ? 'border-gray-600 text-gray-300 hover:border-gray-400 hover:text-white' 
             : 'border-gray-300 text-gray-700 hover:bg-gray-50'
         }`}
       >
-        Back to Symptoms
+        ← Back to Symptoms
       </button>
       <button
         onClick={onAnalyze}
         disabled={isLoading}
-        className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center disabled:bg-gray-400"
+        className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed min-w-[200px] justify-center"
       >
         {isLoading ? (
           <>
             <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
-            Analyzing...
+            AI Analyzing Symptoms...
           </>
         ) : (
           <>
             <LightBulbIcon className="h-4 w-4 mr-2" />
-            Analyze with Expert System
+            🧠 Run AI Diagnosis
           </>
         )}
       </button>
@@ -686,39 +832,47 @@ const RiskAssessmentStep = ({ riskFactors, setRiskFactors, selectedSymptoms, sym
   </div>
 );
 
-// Results Step Component (keep this the same as before)
-const ResultsStep = ({ results, riskFactors, highContrast, onBookAppointment, onNewDiagnosis, onDownloadReport }) => {
+// Enhanced Results Step Component
+const ResultsStep = ({ results, riskFactors, patientInfo, highContrast, onBookAppointment, onNewDiagnosis, onDownloadReport }) => {
   const topResult = results[0];
-  const requiresChestXRay = results.some(result => result.requiresChestXRay);
+  const requiresLabTests = results.some(result => result.requiresLabTests);
+  const hasCriticalSymptoms = results.some(result => result.criticalSymptomsCount > 0);
 
   return (
     <div className={`rounded-2xl shadow-xl p-6 ${highContrast ? 'bg-gray-800 text-white' : 'bg-white'}`}>
-      <h2 className="text-2xl font-bold mb-4">Expert System Diagnosis Results</h2>
+      <h2 className="text-2xl font-bold mb-4">Step 3: AI Diagnosis Results</h2>
       
       {/* Overall Recommendation */}
-      <div className={`mb-6 p-4 rounded-lg border ${
-        topResult?.confidence >= 70 
-          ? 'bg-red-50 border-red-200' 
-          : topResult?.confidence >= 40 
-          ? 'bg-yellow-50 border-yellow-200' 
-          : 'bg-green-50 border-green-200'
+      <div className={`mb-6 p-4 rounded-lg border-2 ${
+        topResult?.confidenceLevel === 'high' 
+          ? 'bg-red-50 border-red-300' 
+          : topResult?.confidenceLevel === 'medium' 
+          ? 'bg-yellow-50 border-yellow-300' 
+          : 'bg-green-50 border-green-300'
       }`}>
-        <div className="flex items-center">
-          <ExclamationTriangleIcon className={`h-5 w-5 ${
-            topResult?.confidence >= 70 ? 'text-red-500' :
-            topResult?.confidence >= 40 ? 'text-yellow-500' : 'text-green-500'
-          } mr-2`} />
+        <div className="flex items-start">
+          <ExclamationTriangleIcon className={`h-6 w-6 mt-1 mr-3 ${
+            topResult?.confidenceLevel === 'high' ? 'text-red-500' :
+            topResult?.confidenceLevel === 'medium' ? 'text-yellow-500' : 'text-green-500'
+          }`} />
           <div>
-            <span className={`font-medium ${
-              topResult?.confidence >= 70 ? 'text-red-800' :
-              topResult?.confidence >= 40 ? 'text-yellow-800' : 'text-green-800'
+            <h3 className={`font-bold text-lg ${
+              topResult?.confidenceLevel === 'high' ? 'text-red-800' :
+              topResult?.confidenceLevel === 'medium' ? 'text-yellow-800' : 'text-green-800'
             }`}>
-              {topResult?.message || 'No significant diagnosis detected'}
-            </span>
-            {requiresChestXRay && (
-              <div className="text-red-600 font-medium mt-1 flex items-center">
+              {topResult?.confidenceLevel === 'high' ? '🚨 URGENT ATTENTION REQUIRED' :
+               topResult?.confidenceLevel === 'medium' ? '⚠️ MEDICAL CONSULTATION NEEDED' : '📋 MONITOR SYMPTOMS'}
+            </h3>
+            <p className={`mt-1 ${
+              topResult?.confidenceLevel === 'high' ? 'text-red-700' :
+              topResult?.confidenceLevel === 'medium' ? 'text-yellow-700' : 'text-green-700'
+            }`}>
+              {topResult?.message}
+            </p>
+            {requiresLabTests && (
+              <div className="flex items-center mt-2 text-red-600 font-medium">
                 <ExclamationTriangleIcon className="h-4 w-4 mr-1" />
-                Chest X-ray recommended for Very Strong signs
+                Laboratory tests (blood work) strongly recommended
               </div>
             )}
           </div>
@@ -728,36 +882,68 @@ const ResultsStep = ({ results, riskFactors, highContrast, onBookAppointment, on
       {/* Results Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {results.map((result, index) => (
-          <div key={result.disease} className={`border rounded-lg p-4 ${
-            highContrast ? 'border-gray-600' : 'border-gray-200'
+          <div key={result.disease} className={`border-2 rounded-lg p-4 ${
+            highContrast ? 'border-gray-600' : 
+            index === 0 ? 'border-red-200 bg-red-50' :
+            index === 1 ? 'border-orange-200 bg-orange-50' : 'border-blue-200 bg-blue-50'
           }`}>
-            <h3 className="font-semibold mb-3 text-lg">{result.disease}</h3>
+            <div className="flex justify-between items-start mb-3">
+              <h3 className="font-semibold text-lg">{result.disease}</h3>
+              <span className={`px-2 py-1 rounded text-sm font-medium ${
+                result.confidenceLevel === 'high' ? 'bg-red-100 text-red-800' :
+                result.confidenceLevel === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+              }`}>
+                {result.confidenceLevel.toUpperCase()}
+              </span>
+            </div>
+            
             <div className="text-center mb-4">
               <div className="text-3xl font-bold mb-2">{result.confidence}%</div>
-              <div className={`w-full rounded-full h-3 mb-2 ${
-                highContrast ? 'bg-gray-600' : 'bg-gray-200'
-              }`}>
+              <div className={`w-full rounded-full h-3 mb-2 ${highContrast ? 'bg-gray-600' : 'bg-gray-200'}`}>
                 <div 
                   className="h-3 rounded-full transition-all duration-1000"
                   style={{ 
                     width: `${result.confidence}%`,
-                    backgroundColor: index === 0 ? '#ef4444' : index === 1 ? '#f97316' : '#3b82f6'
+                    backgroundColor: 
+                      result.confidenceLevel === 'high' ? '#ef4444' :
+                      result.confidenceLevel === 'medium' ? '#f59e0b' : '#10b981'
                   }}
                 ></div>
               </div>
+              <div className="text-sm opacity-75">Confidence Score: {result.totalScore}</div>
             </div>
             
-            <div className="space-y-2 text-sm">
-              <div><strong>Action:</strong> {result.action}</div>
+            <div className="space-y-3 text-sm">
+              <div>
+                <strong>🩺 Action Required:</strong> 
+                <div className="mt-1 font-medium">{result.action}</div>
+              </div>
+              
               {result.recommendedDrugs.length > 0 && (
                 <div>
-                  <strong>Recommended Drugs:</strong> {result.recommendedDrugs.join(', ')}
+                  <strong>💊 Recommended Treatment:</strong>
+                  <ul className="mt-1 space-y-1">
+                    {result.recommendedDrugs.map(drug => (
+                      <li key={drug}>• {drug}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
-              <div><strong>Matching Symptoms:</strong> {result.matchingSymptoms.length}</div>
-              {result.requiresChestXRay && (
+              
+              <div>
+                <strong>📋 Matching Symptoms:</strong> 
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {result.matchingSymptoms.map(symptom => (
+                    <span key={symptom} className="px-2 py-1 bg-gray-200 rounded text-xs">
+                      {symptom}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              
+              {result.criticalSymptomsCount > 0 && (
                 <div className="text-red-600 font-medium">
-                  ✓ Chest X-ray required
+                  ⚠️ {result.criticalSymptomsCount} critical symptom(s) detected
                 </div>
               )}
             </div>
@@ -765,37 +951,60 @@ const ResultsStep = ({ results, riskFactors, highContrast, onBookAppointment, on
         ))}
       </div>
 
+      {/* Risk Factors Summary */}
+      {Object.values(riskFactors).some(factor => factor) && (
+        <div className={`p-4 rounded-lg mb-6 ${highContrast ? 'bg-gray-700' : 'bg-yellow-50 border border-yellow-200'}`}>
+          <h3 className="font-semibold mb-2">⚠️ Identified Risk Factors</h3>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(riskFactors)
+              .filter(([_, value]) => value)
+              .map(([key]) => (
+                <span key={key} className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                  {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                </span>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-4 justify-between mt-8">
         <button
           onClick={onNewDiagnosis}
-          className={`px-6 py-3 border rounded-lg font-medium ${
+          className={`px-6 py-3 border rounded-lg font-medium flex items-center ${
             highContrast 
-              ? 'border-gray-600 text-gray-300 hover:border-gray-400' 
+              ? 'border-gray-600 text-gray-300 hover:border-gray-400 hover:text-white' 
               : 'border-gray-300 text-gray-700 hover:bg-gray-50'
           }`}
         >
-          <ArrowPathIcon className="h-4 w-4 inline mr-2" />
+          <ArrowPathIcon className="h-4 w-4 mr-2" />
           New Diagnosis
         </button>
         
         <button
           onClick={onDownloadReport}
-          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center"
         >
-          <DocumentTextIcon className="h-4 w-4 inline mr-2" />
+          <DocumentTextIcon className="h-4 w-4 mr-2" />
           Download Medical Report
         </button>
         
         {topResult && (
           <button
             onClick={() => onBookAppointment(topResult.disease)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center"
           >
-            <CalendarIcon className="h-4 w-4 inline mr-2" />
-            Book Appointment with Specialist
+            <CalendarIcon className="h-4 w-4 mr-2" />
+            Book Specialist Appointment
           </button>
         )}
+      </div>
+
+      {/* Medical Disclaimer */}
+      <div className={`mt-6 p-4 rounded-lg text-sm ${highContrast ? 'bg-gray-700' : 'bg-gray-100'}`}>
+        <strong>📋 Medical Disclaimer:</strong> This AI diagnosis is for preliminary assessment only. 
+        Always consult qualified healthcare professionals for accurate diagnosis and treatment. 
+        In emergency situations, seek immediate medical attention.
       </div>
     </div>
   );
