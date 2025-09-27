@@ -180,6 +180,7 @@ const DoctorPrescriptions = () => {
 
   useEffect(() => {
     fetchDoctorData();
+    fetchDrugs(); // Added: Fetch drugs on component mount
   }, []);
 
   useEffect(() => {
@@ -230,6 +231,33 @@ const DoctorPrescriptions = () => {
       });
     } catch (error) {
       console.error("Error fetching doctor data:", error);
+    }
+  };
+
+  const fetchDrugs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("drugs")
+        .select(
+          `
+          id,
+          drug_name,
+          generic_name,
+          dosage,
+          form_id (form_name),
+          category_id (category_name),
+          requires_prescription,
+          description
+        `
+        )
+        .order("drug_name");
+
+      if (error) throw error;
+      setDrugs(data);
+      setFilteredDrugs(data);
+      console.log("Drugs fetched successfully:", data.length, "drugs found");
+    } catch (error) {
+      console.error("Error fetching drugs:", error);
     }
   };
 
@@ -318,32 +346,6 @@ const DoctorPrescriptions = () => {
     }
   };
 
-  const fetchDrugs = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("drugs")
-        .select(
-          `
-          id,
-          drug_name,
-          generic_name,
-          dosage,
-          form_id (form_name),
-          category_id (category_name),
-          requires_prescription,
-          description
-        `
-        )
-        .order("drug_name");
-
-      if (error) throw error;
-      setDrugs(data);
-      setFilteredDrugs(data);
-    } catch (error) {
-      console.error("Error fetching drugs:", error);
-    }
-  };
-
   const fetchPatientData = async (patientId) => {
     try {
       // Fetch patient allergies
@@ -421,6 +423,7 @@ const DoctorPrescriptions = () => {
       setSelectedPatient({ ...userData, ...patientData });
       setPatientAllergies(allergyData || []);
       setActiveTab("prescription");
+      await fetchPatientData(patientId); // Fetch prescription history
     } catch (error) {
       console.error("Error selecting patient:", error);
     } finally {
@@ -476,7 +479,10 @@ const DoctorPrescriptions = () => {
     setInteractionWarnings(warnings);
   };
 
-  const calculateDosage = (drug, patientWeight, condition) => {
+  const calculateDosage = (drug, patientWeight = 70, condition) => {
+    // Use default weight if not provided
+    const weight = patientWeight || 70;
+    
     // Simplified dosage calculation based on WHO guidelines
     const dosageRules = {
       "Artemether-lumefantrine": (weight) => {
@@ -490,10 +496,12 @@ const DoctorPrescriptions = () => {
       default: () => "As prescribed",
     };
 
-    return dosageRules[drug]?.(patientWeight) || dosageRules.default();
+    return dosageRules[drug]?.(weight) || dosageRules.default();
   };
 
   const addDrugToPrescription = (drug) => {
+    console.log("Adding drug to prescription:", drug); // Debug log
+    
     setCurrentPrescription((prev) => ({
       ...prev,
       items: [
@@ -556,8 +564,18 @@ const DoctorPrescriptions = () => {
   };
 
   const savePrescription = async () => {
-    if (!selectedPatient || currentPrescription.items.length === 0) {
-      alert("Please select a patient and add at least one medication");
+    console.log("Save button clicked"); // Debug log
+    console.log("Selected patient:", selectedPatient); // Debug log
+    console.log("Current prescription items:", currentPrescription.items); // Debug log
+    console.log("User:", user); // Debug log
+
+    if (!selectedPatient) {
+      alert("Please select a patient");
+      return;
+    }
+
+    if (currentPrescription.items.length === 0) {
+      alert("Please add at least one medication to the prescription");
       return;
     }
 
@@ -565,11 +583,27 @@ const DoctorPrescriptions = () => {
       setLoading(true);
 
       // Get prescription status ID for 'active'
-      const { data: status } = await supabase
+      const { data: status, error: statusError } = await supabase
         .from("prescription_statuses")
         .select("id")
         .eq("status_code", "active")
         .single();
+
+      if (statusError || !status) {
+        console.error("Error fetching prescription status:", statusError);
+        alert("Error: Could not find active prescription status. Please try again.");
+        return;
+      }
+
+      // Validate that all drugs have required fields
+      const invalidItems = currentPrescription.items.filter(item => 
+        !item.drug_id || !item.dosage_instructions || !item.duration_days || !item.quantity
+      );
+
+      if (invalidItems.length > 0) {
+        alert("Please fill in all required fields for each medication");
+        return;
+      }
 
       // Create prescription
       const { data: prescription, error: presError } = await supabase
@@ -579,57 +613,93 @@ const DoctorPrescriptions = () => {
           doctor_id: user.id,
           diagnosis_id: currentPrescription.diagnosis_id || null,
           prescription_date: new Date().toISOString().split("T")[0],
-          status_id: status?.id,
+          status_id: status.id,
           notes: currentPrescription.notes,
         })
         .select()
         .single();
 
-      if (presError) throw presError;
+      if (presError) {
+        console.error("Error creating prescription:", presError);
+        alert(`Error saving prescription: ${presError.message}`);
+        return;
+      }
 
       // Add prescription items
-      for (const item of currentPrescription.items) {
-        await supabase.from("prescription_items").insert({
-          prescription_id: prescription.id,
-          drug_id: item.drug_id,
-          quantity: item.quantity,
-          dosage_instructions: item.dosage_instructions,
-          duration_days: item.duration_days,
-        });
+      const prescriptionItems = currentPrescription.items.map(item => ({
+        prescription_id: prescription.id,
+        drug_id: item.drug_id,
+        quantity: item.quantity,
+        dosage_instructions: item.dosage_instructions,
+        duration_days: item.duration_days,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from("prescription_items")
+        .insert(prescriptionItems);
+
+      if (itemsError) {
+        console.error("Error adding prescription items:", itemsError);
+        
+        // Rollback the prescription if items fail
+        await supabase
+          .from("prescriptions")
+          .delete()
+          .eq("id", prescription.id);
+        
+        alert(`Error saving prescription items: ${itemsError.message}`);
+        return;
       }
 
       // Log activity
-      await supabase.from("activity_log").insert({
-        user_id: user.id,
-        activity_type_id: await getActivityTypeId("create_prescription"),
-        table_name: "prescriptions",
-        record_id: prescription.id,
-        new_values: {
-          patient_id: selectedPatient.id,
-          items_count: currentPrescription.items.length,
-        },
-      });
+      try {
+        const activityTypeId = await getActivityTypeId("create_prescription");
+        if (activityTypeId) {
+          await supabase.from("activity_log").insert({
+            user_id: user.id,
+            activity_type_id: activityTypeId,
+            table_name: "prescriptions",
+            record_id: prescription.id,
+            new_values: {
+              patient_id: selectedPatient.id,
+              items_count: currentPrescription.items.length,
+            },
+          });
+        }
+      } catch (logError) {
+        console.error("Error logging activity:", logError);
+        // Don't fail the whole operation if logging fails
+      }
 
       alert("Prescription saved successfully!");
 
-      // Reset form
+      // Reset form and refresh data
       setCurrentPrescription({ diagnosis_id: "", notes: "", items: [] });
-      await fetchPatientData(selectedPatient.id); // Refresh history
+      await fetchPatientData(selectedPatient.id);
+      
+      // Optionally switch back to prescription tab to show the updated history
+      setActiveTab("history");
+
     } catch (error) {
-      console.error("Error saving prescription:", error);
-      alert("Error saving prescription. Please try again.");
+      console.error("Unexpected error saving prescription:", error);
+      alert("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const getActivityTypeId = async (activityCode) => {
-    const { data } = await supabase
-      .from("activity_types")
-      .select("id")
-      .eq("activity_code", activityCode)
-      .single();
-    return data?.id;
+    try {
+      const { data } = await supabase
+        .from("activity_types")
+        .select("id")
+        .eq("activity_code", activityCode)
+        .single();
+      return data?.id;
+    } catch (error) {
+      console.error("Error fetching activity type:", error);
+      return null;
+    }
   };
 
   const renderPatientSelection = () => (
@@ -947,10 +1017,13 @@ const DoctorPrescriptions = () => {
         </button>
         <button
           onClick={savePrescription}
-          disabled={loading || currentPrescription.items.length === 0}
-          className="btn-primary"
+          disabled={loading || currentPrescription.items.length === 0 || !selectedPatient}
+          className={`btn-primary ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {loading ? "Saving..." : "Save Prescription"}
+          {loading ? "Saving..." : 
+           !selectedPatient ? "Select Patient First" :
+           currentPrescription.items.length === 0 ? "Add Medications First" :
+           "Save Prescription"}
         </button>
       </div>
     </div>
