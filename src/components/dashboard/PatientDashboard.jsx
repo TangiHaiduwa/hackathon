@@ -507,7 +507,7 @@ const PatientDashboard = () => {
         <div className="bg-white shadow rounded-lg hover:shadow-md transition-shadow duration-200">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h3 className="text-lg font-medium text-gray-900">Current Medications</h3>
-            <Link to="/pharmacy" className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center">
+            <Link to="" className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center">
               View All <ArrowRightIcon className="h-4 w-4 ml-1" />
             </Link>
           </div>

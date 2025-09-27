@@ -1024,7 +1024,7 @@ const DoctorDiagnosis = () => {
               disabled={!finalDiagnosis}
               className="btn-primary"
             >
-              Continue to Treatment Plan
+              Continue to fn
             </button>
           </div>
         </div>
@@ -1241,7 +1241,7 @@ const DoctorDiagnosis = () => {
           <div className="p-6">
             <div className="space-y-2">
               {selectedSymptoms.map((symptomId) => {
-                const symptom = symptoms.find((s) => s.id === symptomomId);
+                const symptom = symptoms.find((s) => s.id === symptomId);
                 return symptom ? (
                   <div
                     key={symptom.id}
