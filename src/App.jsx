@@ -53,7 +53,7 @@ import MedicalRecordsPage from "./components/nurse/MedicalRecordsPage";
 import MedicalRecordsPage1 from "./components/receptionist/MedicalRecordsPage1";
 import PatientRegistration from "./components/receptionist/PatientRegistration";
 import ReceptionistAppointments from "./components/receptionist/ReceptionistAppointments";
-import Scheduling from "./components/receptionist/Scheduling";
+// import Scheduling from "./components/receptionist/Scheduling";
 
 //Patient Routes
 import SymptomChecker from './components/diagnosis/SymptomChecker';
@@ -145,7 +145,7 @@ function App() {
               path="/receptionist/patient-registration"
               element={<PatientRegistration />}
             />
-            <Route path="/receptionist/scheduling" element={<Scheduling />} />
+            {/* <Route path="/receptionist/scheduling" element={<Scheduling />} /> */}
             <Route
               path="/reception/medical-records1"
               element={<MedicalRecordsPage1 />}

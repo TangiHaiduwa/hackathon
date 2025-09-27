@@ -59,19 +59,23 @@ const PatientRegistration = () => {
   const [error, setError] = useState('');
   const [genders, setGenders] = useState([]);
   const [bloodTypes, setBloodTypes] = useState([]);
+  const [stats, setStats] = useState({
+    totalPatients: 0,
+    registeredToday: 0,
+    activePatients: 0
+  });
 
   const navigation = [
       { name: 'Dashboard', href: '/reception-dashboard', icon: UserGroupIcon, current: true },
       { name: 'Appointments', href: '/receptionist/receptionist-appointments', icon: CalendarIcon, current: false },
       { name: 'Patient Registration', href: '/receptionist/patient-registration', icon: PlusIcon, current: false },
-      { name: 'Scheduling', href: '/receptionist/scheduling', icon: ClockIcon, current: false },
+      // { name: 'Scheduling', href: '/receptionist/scheduling', icon: ClockIcon, current: false },
       { name: 'Medical Records', href: '/reception/medical-records1', icon: ClockIcon, current: false },
-  
-  
-    ];
+  ];
 
   useEffect(() => {
     fetchReferenceData();
+    fetchStats();
   }, []);
 
   const fetchReferenceData = async () => {
@@ -92,6 +96,71 @@ const PatientRegistration = () => {
       setBloodTypes(bloodTypesData || []);
     } catch (error) {
       console.error('Error fetching reference data:', error);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Get total patients count
+      const { count: totalPatients, error: totalError } = await supabase
+        .from('patients')
+        .select('*', { count: 'exact', head: true });
+
+      // Get patients registered today
+      const patientRoleId = await getPatientRoleId();
+      let registeredToday = 0;
+      
+      if (patientRoleId) {
+        const { count: todayCount, error: todayError } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true })
+          .eq('role_id', patientRoleId)
+          .gte('created_at', `${today}T00:00:00`)
+          .lte('created_at', `${today}T23:59:59`);
+        
+        registeredToday = todayCount || 0;
+      }
+
+      // Get active patients (patients with appointments in last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const { data: activePatientsData, error: activeError } = await supabase
+        .from('appointments')
+        .select('patient_id')
+        .gte('appointment_date', thirtyDaysAgo.toISOString().split('T')[0])
+        .not('patient_id', 'is', null);
+
+      // Get unique patient IDs
+      const uniquePatientIds = new Set(activePatientsData?.map(apt => apt.patient_id) || []);
+      const activePatients = uniquePatientIds.size;
+
+      setStats({
+        totalPatients: totalPatients || 0,
+        registeredToday: registeredToday,
+        activePatients: activePatients
+      });
+
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  const getPatientRoleId = async () => {
+    try {
+      const { data: roleData, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('role_name', 'patient')
+        .single();
+
+      if (roleError) throw roleError;
+      return roleData?.id;
+    } catch (error) {
+      console.error('Error getting patient role ID:', error);
+      return null;
     }
   };
 
@@ -227,6 +296,7 @@ const PatientRegistration = () => {
       }
 
       setSuccess(true);
+      fetchStats(); // Update stats after successful registration
       resetForm();
       
       // Auto-hide success message after 5 seconds
@@ -656,7 +726,7 @@ const PatientRegistration = () => {
               <UserCircleIcon className="h-8 w-8 text-blue-600 mr-3" />
               <div>
                 <p className="text-sm font-medium text-blue-900">Total Patients</p>
-                <p className="text-2xl font-bold text-blue-700">1,247</p>
+                <p className="text-2xl font-bold text-blue-700">{stats.totalPatients}</p>
               </div>
             </div>
           </div>
@@ -666,7 +736,7 @@ const PatientRegistration = () => {
               <CalendarIcon className="h-8 w-8 text-green-600 mr-3" />
               <div>
                 <p className="text-sm font-medium text-green-900">Registered Today</p>
-                <p className="text-2xl font-bold text-green-700">12</p>
+                <p className="text-2xl font-bold text-green-700">{stats.registeredToday}</p>
               </div>
             </div>
           </div>
@@ -676,7 +746,7 @@ const PatientRegistration = () => {
               <CheckCircleIcon className="h-8 w-8 text-purple-600 mr-3" />
               <div>
                 <p className="text-sm font-medium text-purple-900">Active Patients</p>
-                <p className="text-2xl font-bold text-purple-700">893</p>
+                <p className="text-2xl font-bold text-purple-700">{stats.activePatients}</p>
               </div>
             </div>
           </div>
