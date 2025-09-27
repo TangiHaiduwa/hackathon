@@ -964,8 +964,6 @@
 
 
 
-
-
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { useAuth } from '../../contexts/AuthContext';
@@ -990,41 +988,25 @@ const NurseDashboard = () => {
   const [medicationSchedule, setMedicationSchedule] = useState([]);
   const [priorityAlerts, setPriorityAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
-<<<<<<< HEAD
-  const [activeTab, setActiveTab] = useState('assignments');
-=======
-  const [showPatientForm, setShowPatientForm] = useState(false);
-  const [showAssignPatientModal, setShowAssignPatientModal] = useState(false);
-  const [availablePatients, setAvailablePatients] = useState([]);
-  const [selectedPatientToAssign, setSelectedPatientToAssign] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formSuccess, setFormSuccess] = useState('');
   const [formError, setFormError] = useState('');
   
-  const [newPatient, setNewPatient] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone_number: '',
-    date_of_birth: '',
-    emergency_contact_name: '',
-    emergency_contact_phone: ''
-  });
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
-
   const navigation = [
     { name: 'Dashboard', href: '/nurse-dashboard', icon: UserGroupIcon, current: true },
     { name: 'Patient Care', href: '/patient-care', icon: HeartIcon },
     { name: 'Vital Signs', href: '/vitals', icon: ChartBarIcon },
     { name: 'Medication', href: '/medication', icon: ClipboardDocumentListIcon },
-<<<<<<< HEAD
-    { name: 'Medical Records', href: '/medical-records1', icon: DocumentTextIcon },
-    { name: 'Patient Rounds', href: '/patient-rounds-page', icon: DocumentTextIcon },
-=======
     { name: 'Medical Records', href: '/medical-records', icon: DocumentTextIcon },
     { name: 'Patient Rounds', href: '/patient-rounds', icon: DocumentTextIcon },
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
   ];
+
+  // MESMTF Competition Features
+  const malariaTyphoidStats = {
+    malariaCases: 0,
+    typhoidCases: 0,
+    coInfections: 0,
+    chestXraysRequired: 0
+  };
 
   // Fetch nurse data and dashboard information
   useEffect(() => {
@@ -1034,41 +1016,34 @@ const NurseDashboard = () => {
       try {
         setLoading(true);
         
-        // Get nurse profile with proper role checking
+        // Get nurse profile
         const { data: nurseData, error: nurseError } = await supabase
           .from('users')
           .select(`
-            id,
-            first_name,
-            last_name,
-            email,
-            roles(role_name),
-            medical_staff(
-              id,
-              department_id,
-              departments(department_name)
-            )
+            *,
+            medical_staff!inner(
+              *,
+              departments(*)
+            ),
+            roles(*)
           `)
           .eq('id', authUser.id)
           .single();
 
-        if (nurseError) {
-          console.error('Error fetching nurse profile:', nurseError);
-          return;
-        }
-
+        if (nurseError) throw nurseError;
         setUser(nurseData);
 
-        // Fetch all dashboard data in parallel
-        const [assignments, medications, alerts] = await Promise.all([
-          fetchTodaysAssignments(authUser.id),
-          fetchMedicationSchedule(authUser.id),
-          fetchPriorityAlerts(authUser.id)
-        ]);
+        // Fetch all dashboard data
+        const assignments = await fetchTodaysAssignments(authUser.id);
+        const medications = await fetchMedicationSchedule(authUser.id);
+        const alerts = await fetchPriorityAlerts(authUser.id);
 
         setTodaysAssignments(assignments);
         setMedicationSchedule(medications);
         setPriorityAlerts(alerts);
+
+        // Calculate MESMTF statistics
+        calculateMESMTFStats(assignments);
 
       } catch (error) {
         console.error('Error fetching nurse data:', error);
@@ -1080,55 +1055,62 @@ const NurseDashboard = () => {
     fetchNurseData();
 
     // Set up real-time subscription for alerts
-    const alertsSubscription = supabase
-      .channel('nurse-alerts')
+    const subscription = supabase
+      .channel('nurse-dashboard')
       .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'patient_alerts' },
-        (payload) => {
-          if (authUser) {
-            fetchPriorityAlerts(authUser.id).then(setPriorityAlerts);
-          }
+        { event: '*', schema: 'public', table: 'patient_alerts' },
+        () => {
+          fetchPriorityAlerts(authUser.id).then(setPriorityAlerts);
         }
       )
       .subscribe();
 
     return () => {
-      alertsSubscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, [authUser]);
 
-<<<<<<< HEAD
-  // CORRECTED: Fetch today's patient assignments
-=======
-  // Fetch today's patient assignments
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
+  // Calculate MESMTF statistics
+  const calculateMESMTFStats = (assignments) => {
+    assignments.forEach(patient => {
+      if (patient.condition?.toLowerCase().includes('malaria')) {
+        malariaTyphoidStats.malariaCases++;
+      }
+      if (patient.condition?.toLowerCase().includes('typhoid')) {
+        malariaTyphoidStats.typhoidCases++;
+      }
+      if (patient.condition?.toLowerCase().includes('co-infection')) {
+        malariaTyphoidStats.coInfections++;
+      }
+      if (patient.requiresChestXray) {
+        malariaTyphoidStats.chestXraysRequired++;
+      }
+    });
+  };
+
+  // Fetch today's patient assignments (patients already assigned to this nurse)
   const fetchTodaysAssignments = async (nurseId) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      // First, get nurse's assigned patients
       const { data: assignments, error: assignmentsError } = await supabase
         .from('nurse_patient_assignments')
         .select(`
           patient_id,
-          patients(
+          patients!inner(
             id,
-            users(
+            users!inner(
               first_name,
               last_name,
+              phone_number,
               date_of_birth
             ),
-            emergency_contact_name
+            emergency_contact_name,
+            emergency_contact_phone
           )
         `)
         .eq('nurse_id', nurseId)
-        .eq('is_active', true)
-        .eq('assigned_date', today);
+        .eq('is_active', true);
 
-      if (assignmentsError) {
-        console.error('Error fetching assignments:', assignmentsError);
-        return [];
-      }
+      if (assignmentsError) throw assignmentsError;
 
       if (!assignments || assignments.length === 0) {
         return [];
@@ -1136,7 +1118,7 @@ const NurseDashboard = () => {
 
       const patientIds = assignments.map(assignment => assignment.patient_id);
 
-      // Fetch latest diagnoses for these patients
+      // Fetch medical diagnoses for these patients
       const { data: diagnosesData } = await supabase
         .from('medical_diagnoses')
         .select(`
@@ -1148,36 +1130,41 @@ const NurseDashboard = () => {
         .in('patient_id', patientIds)
         .order('diagnosis_date', { ascending: false });
 
-      // Fetch latest vital signs
+      // Fetch latest vital signs for these patients
       const { data: vitalsData } = await supabase
         .from('vital_signs')
         .select(`
           patient_id,
           heart_rate,
           temperature,
+          blood_pressure_systolic,
+          blood_pressure_diastolic,
+          oxygen_saturation,
           recorded_at
         `)
         .in('patient_id', patientIds)
         .order('recorded_at', { ascending: false });
 
-      // Fetch today's appointments
-      const { data: appointmentsData } = await supabase
-        .from('appointments')
-        .select('patient_id, appointment_time')
+      // Fetch expert system data for MESMTF integration
+      const { data: expertSystemData } = await supabase
+        .from('diagnosis_sessions')
+        .select(`
+          patient_id,
+          malaria_probability,
+          typhoid_probability,
+          requires_chest_xray
+        `)
         .in('patient_id', patientIds)
-        .eq('appointment_date', today)
-        .order('appointment_time', { ascending: true });
+        .order('created_at', { ascending: false });
 
-      // Process and combine data
       return assignments.map(assignment => {
         const patientId = assignment.patient_id;
         const patientDiagnoses = diagnosesData?.filter(d => d.patient_id === patientId) || [];
         const patientVitals = vitalsData?.filter(v => v.patient_id === patientId) || [];
-        const patientAppointments = appointmentsData?.filter(apt => apt.patient_id === patientId) || [];
+        const patientExpertData = expertSystemData?.filter(e => e.patient_id === patientId)[0] || {};
         
         const latestDiagnosis = patientDiagnoses[0];
         const latestVitals = patientVitals[0];
-        const nextAppointment = patientAppointments[0];
 
         return {
           id: patientId,
@@ -1187,68 +1174,37 @@ const NurseDashboard = () => {
           severity: latestDiagnosis?.severity || 'stable',
           lastVitals: latestVitals?.recorded_at 
             ? new Date(latestVitals.recorded_at).toLocaleTimeString() 
-            : 'No vitals recorded',
+            : 'No vitals',
           heartRate: latestVitals?.heart_rate || '--',
           temperature: latestVitals?.temperature || '--',
-          nextAppointment: nextAppointment?.appointment_time || 'No appointment today',
-          priority: getPatientPriority(latestDiagnosis?.severity)
+          bloodPressure: latestVitals ? 
+            `${latestVitals.blood_pressure_systolic || '--'}/${latestVitals.blood_pressure_diastolic || '--'}` : 
+            '--/--',
+          oxygenSaturation: latestVitals?.oxygen_saturation || '--',
+          malariaProbability: patientExpertData.malaria_probability || 0,
+          typhoidProbability: patientExpertData.typhoid_probability || 0,
+          requiresChestXray: patientExpertData.requires_chest_xray || false,
+          priority: getPatientPriority(latestDiagnosis?.severity, patientExpertData)
         };
       });
-
     } catch (error) {
-      console.error('Error in fetchTodaysAssignments:', error);
+      console.error('Error fetching assignments:', error);
       return [];
     }
   };
 
-<<<<<<< HEAD
-  // CORRECTED: Fetch medication schedule
-=======
-  // Fetch today's appointments separately
-  const fetchTodaysAppointments = async (nurseId, today) => {
-    try {
-      // First get patient IDs assigned to this nurse
-      const { data: assignments } = await supabase
-        .from('nurse_patient_assignments')
-        .select('patient_id')
-        .eq('nurse_id', nurseId)
-        .eq('is_active', true);
-
-      if (!assignments || assignments.length === 0) {
-        return [];
-      }
-
-      const patientIds = assignments.map(assignment => assignment.patient_id);
-
-      const { data, error } = await supabase
-        .from('appointments')
-        .select('*')
-        .in('patient_id', patientIds)
-        .eq('appointment_date', today)
-        .order('appointment_time', { ascending: true });
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching appointments:', error);
-      return [];
-    }
-  };
-
-  // Fetch medication administration schedule
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
+  // Fetch medication administration schedule for assigned patients
   const fetchMedicationSchedule = async (nurseId) => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const now = new Date();
       
-      // Get assigned patients
+      // Get the patient IDs assigned to this nurse
       const { data: assignments, error: assignmentsError } = await supabase
         .from('nurse_patient_assignments')
         .select('patient_id')
         .eq('nurse_id', nurseId)
-        .eq('is_active', true)
-        .eq('assigned_date', today);
+        .eq('is_active', true);
 
       if (assignmentsError) throw assignmentsError;
 
@@ -1258,26 +1214,25 @@ const NurseDashboard = () => {
 
       const patientIds = assignments.map(assignment => assignment.patient_id);
 
-      // Fetch medication schedule for assigned patients
+      // Fetch medication schedule for these patients
       const { data, error } = await supabase
         .from('medication_schedule')
         .select(`
-          id,
-          scheduled_time,
-          status,
-          administered_time,
-          administered_by,
-          notes,
-          prescription_items(
+          *,
+          prescription_items!inner(
             dosage_instructions,
-            drugs(
+            duration_days,
+            drugs!inner(
               drug_name,
-              dosage
+              dosage,
+              generic_name
             ),
-            prescriptions(
+            prescriptions!inner(
               patient_id,
-              patients(
-                users(first_name, last_name)
+              medical_diagnoses!inner(
+                diseases!inner(
+                  disease_name
+                )
               )
             )
           )
@@ -1289,42 +1244,62 @@ const NurseDashboard = () => {
 
       if (error) throw error;
 
-      return (data || []).map(med => ({
-        id: med.id,
-        patient: med.prescription_items?.prescriptions?.patients?.users 
-          ? `${med.prescription_items.prescriptions.patients.users.first_name} ${med.prescription_items.prescriptions.patients.users.last_name}`
-          : 'Unknown Patient',
-        medication: med.prescription_items?.drugs?.drug_name || 'Unknown Medication',
-        dosage: med.prescription_items?.drugs?.dosage || '--',
-        instructions: med.prescription_items?.dosage_instructions || 'No instructions',
-        scheduledTime: new Date(med.scheduled_time),
-        status: med.status || 'scheduled',
-        isOverdue: med.status === 'scheduled' && new Date(med.scheduled_time) < now,
-        isCritical: med.prescription_items?.drugs?.dosage?.includes('high') || false
-      }));
+      // Fetch patient names and disease information
+      const medicationWithPatients = await Promise.all(
+        (data || []).map(async (med) => {
+          const { data: patientData } = await supabase
+            .from('patients')
+            .select(`
+              users!inner(
+                first_name,
+                last_name
+              )
+            `)
+            .eq('id', med.prescription_items.prescriptions.patient_id)
+            .single();
 
+          const disease = med.prescription_items.prescriptions.medical_diagnoses?.[0]?.diseases?.disease_name || 'General';
+          const isMalariaMed = disease.toLowerCase().includes('malaria');
+          const isTyphoidMed = disease.toLowerCase().includes('typhoid');
+
+          return {
+            id: med.id,
+            patient: patientData ? 
+              `${patientData.users.first_name} ${patientData.users.last_name}` : 
+              'Unknown Patient',
+            medication: med.prescription_items.drugs.drug_name,
+            genericName: med.prescription_items.drugs.generic_name,
+            dosage: med.prescription_items.drugs.dosage,
+            instructions: med.prescription_items.dosage_instructions,
+            duration: med.prescription_items.duration_days,
+            disease: disease,
+            scheduledTime: new Date(med.scheduled_time),
+            status: med.status,
+            isOverdue: med.status === 'scheduled' && new Date(med.scheduled_time) < now,
+            isMalariaTreatment: isMalariaMed,
+            isTyphoidTreatment: isTyphoidMed,
+            isCritical: med.prescription_items.drugs.dosage.includes('high') || 
+                       med.prescription_items.drugs.drug_name.toLowerCase().includes('critical')
+          };
+        })
+      );
+
+      return medicationWithPatients;
     } catch (error) {
       console.error('Error fetching medication schedule:', error);
       return [];
     }
   };
 
-<<<<<<< HEAD
-  // CORRECTED: Fetch priority alerts
-=======
-  // Fetch priority alerts
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
+  // Fetch priority alerts for assigned patients
   const fetchPriorityAlerts = async (nurseId) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Get assigned patients
+      // Get patient IDs assigned to this nurse
       const { data: assignments, error: assignmentsError } = await supabase
         .from('nurse_patient_assignments')
         .select('patient_id')
         .eq('nurse_id', nurseId)
-        .eq('is_active', true)
-        .eq('assigned_date', today);
+        .eq('is_active', true);
 
       if (assignmentsError) throw assignmentsError;
 
@@ -1337,17 +1312,18 @@ const NurseDashboard = () => {
       const { data, error } = await supabase
         .from('patient_alerts')
         .select(`
-          id,
-          title,
-          message,
-          is_resolved,
-          created_at,
-          alert_types(
-            type_name,
-            severity
+          *,
+          alert_types(*),
+          patients!inner(
+            users!inner(
+              first_name,
+              last_name
+            )
           ),
-          patients(
-            users(first_name, last_name)
+          vital_signs(
+            heart_rate,
+            temperature,
+            blood_pressure_systolic
           )
         `)
         .in('patient_id', patientIds)
@@ -1359,203 +1335,24 @@ const NurseDashboard = () => {
 
       return (data || []).map(alert => ({
         id: alert.id,
-        patient: alert.patients?.users 
-          ? `${alert.patients.users.first_name} ${alert.patients.users.last_name}`
-          : 'Unknown Patient',
+        patient: `${alert.patients.users.first_name} ${alert.patients.users.last_name}`,
         type: alert.alert_types?.type_name || 'Alert',
         severity: alert.alert_types?.severity || 'medium',
-        message: alert.message || alert.title,
+        message: alert.message,
         timestamp: new Date(alert.created_at),
-        isCritical: alert.alert_types?.severity === 'critical'
+        vitalSigns: alert.vital_signs?.[0] || {},
+        isCritical: alert.alert_types?.severity === 'critical',
+        isMESMTFRelated: alert.message?.toLowerCase().includes('malaria') || 
+                        alert.message?.toLowerCase().includes('typhoid') ||
+                        alert.alert_types?.type_name?.toLowerCase().includes('fever')
       }));
-
     } catch (error) {
       console.error('Error fetching alerts:', error);
       return [];
     }
   };
 
-<<<<<<< HEAD
-  // CORRECTED: Mark medication as administered
-=======
-  // Add new patient function
-  const addNewPatient = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setFormError('');
-    setFormSuccess('');
-
-    try {
-      // Step 1: Create Auth user with temporary password
-      const tempPassword = generateTempPassword();
-      
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newPatient.email,
-        password: tempPassword,
-        options: {
-          data: {
-            first_name: newPatient.first_name,
-            last_name: newPatient.last_name,
-            user_type: 'patient'
-          }
-        }
-      });
-
-      if (authError) {
-        if (authError.message.includes('already registered')) {
-          throw new Error('This email is already registered. Please use a different email.');
-        }
-        throw authError;
-      }
-
-      if (!authData.user) throw new Error('Failed to create auth user');
-
-      // Step 2: Get patient role ID
-      const { data: roleData, error: roleError } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('role_name', 'patient')
-        .single();
-
-      if (roleError) throw roleError;
-
-      // Step 3: Create user record
-      const { error: userError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email: newPatient.email,
-          first_name: newPatient.first_name,
-          last_name: newPatient.last_name,
-          role_id: roleData.id,
-          phone_number: newPatient.phone_number,
-          date_of_birth: newPatient.date_of_birth
-        });
-
-      if (userError) throw userError;
-
-      // Step 4: Create patient record
-      const { error: patientError } = await supabase
-        .from('patients')
-        .insert({
-          id: authData.user.id,
-          emergency_contact_name: newPatient.emergency_contact_name,
-          emergency_contact_phone: newPatient.emergency_contact_phone
-        });
-
-      if (patientError) throw patientError;
-
-      // Step 5: Assign patient to nurse
-      const { error: assignmentError } = await supabase
-        .from('nurse_patient_assignments')
-        .insert({
-          nurse_id: authUser.id,
-          patient_id: authData.user.id,
-          assigned_date: new Date().toISOString().split('T')[0],
-          is_active: true,
-          assignment_notes: 'Initial assignment from nurse dashboard'
-        });
-
-      if (assignmentError) throw assignmentError;
-
-      setFormSuccess('Patient added successfully and assigned to your care!');
-      
-      // Reset form
-      setNewPatient({
-        first_name: '',
-        last_name: '',
-        email: '',
-        phone_number: '',
-        date_of_birth: '',
-        emergency_contact_name: '',
-        emergency_contact_phone: ''
-      });
-
-      // Refresh assignments
-      const updatedAssignments = await fetchTodaysAssignments(authUser.id);
-      setTodaysAssignments(updatedAssignments);
-
-      setTimeout(() => {
-        setShowPatientForm(false);
-        setFormSuccess('');
-      }, 2000);
-
-    } catch (error) {
-      console.error('Error adding patient:', error);
-      setFormError(error.message || 'Failed to add patient. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Assign existing patient to nurse
-  const assignPatientToNurse = async (patientId) => {
-    try {
-      const { error } = await supabase
-        .from('nurse_patient_assignments')
-        .insert({
-          nurse_id: authUser.id,
-          patient_id: patientId,
-          assigned_date: new Date().toISOString().split('T')[0],
-          is_active: true,
-          assignment_notes: 'Assigned via nurse dashboard'
-        });
-
-      if (error) throw error;
-
-      setFormSuccess('Patient assigned to your care successfully!');
-      
-      // Refresh assignments
-      const updatedAssignments = await fetchTodaysAssignments(authUser.id);
-      setTodaysAssignments(updatedAssignments);
-
-      setTimeout(() => {
-        setFormSuccess('');
-      }, 3000);
-
-    } catch (error) {
-      console.error('Error assigning patient:', error);
-      setFormError('Error assigning patient: ' + error.message);
-    }
-  };
-
-  // Fetch patients not assigned to current nurse
-  const fetchAvailablePatients = async () => {
-    try {
-      // Get all patients
-      const { data: allPatients } = await supabase
-        .from('patients')
-        .select(`
-          id,
-          users!inner(
-            first_name,
-            last_name
-          )
-        `)
-        .order('users(first_name)');
-
-      // Get currently assigned patient IDs
-      const { data: currentAssignments } = await supabase
-        .from('nurse_patient_assignments')
-        .select('patient_id')
-        .eq('nurse_id', authUser.id)
-        .eq('is_active', true);
-
-      const assignedPatientIds = currentAssignments?.map(a => a.patient_id) || [];
-
-      // Filter out already assigned patients
-      const available = allPatients?.filter(patient => 
-        !assignedPatientIds.includes(patient.id)
-      ) || [];
-
-      setAvailablePatients(available);
-    } catch (error) {
-      console.error('Error fetching available patients:', error);
-    }
-  };
-
   // Mark medication as administered
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
   const markMedicationAdministered = async (medicationId) => {
     try {
       const { error } = await supabase
@@ -1569,31 +1366,20 @@ const NurseDashboard = () => {
 
       if (error) throw error;
 
-      // Also record in drug_administration table
-      await supabase
-        .from('drug_administration')
-        .insert({
-          prescription_item_id: medicationId, // This should be the actual prescription_item_id
-          patient_id: null, // You'd need to get this from the medication record
-          administered_by: authUser.id,
-          scheduled_time: new Date().toISOString(),
-          actual_time: new Date().toISOString(),
-          dosage_administered: 'As prescribed', // Get from prescription
-          administration_route: 'oral', // Default, should be configurable
-          status: 'administered'
-        });
-
       // Refresh medication schedule
       const updatedSchedule = await fetchMedicationSchedule(authUser.id);
       setMedicationSchedule(updatedSchedule);
 
+      setFormSuccess('Medication marked as administered successfully!');
+      setTimeout(() => setFormSuccess(''), 3000);
     } catch (error) {
       console.error('Error marking medication administered:', error);
-      alert('Error updating medication status');
+      setFormError('Error updating medication status');
+      setTimeout(() => setFormError(''), 3000);
     }
   };
 
-  // CORRECTED: Resolve alert
+  // Resolve alert
   const resolveAlert = async (alertId) => {
     try {
       const { error } = await supabase
@@ -1611,13 +1397,15 @@ const NurseDashboard = () => {
       const updatedAlerts = await fetchPriorityAlerts(authUser.id);
       setPriorityAlerts(updatedAlerts);
 
+      setFormSuccess('Alert resolved successfully!');
+      setTimeout(() => setFormSuccess(''), 3000);
     } catch (error) {
       console.error('Error resolving alert:', error);
-      alert('Error resolving alert');
+      setFormError('Error resolving alert');
+      setTimeout(() => setFormError(''), 3000);
     }
   };
 
-  // Utility functions
   const calculateAge = (dateOfBirth) => {
     if (!dateOfBirth) return 'Unknown';
     const today = new Date();
@@ -1632,7 +1420,14 @@ const NurseDashboard = () => {
     return age;
   };
 
-  const getPatientPriority = (severity) => {
+  const getPatientPriority = (severity, expertData) => {
+    // Priority based on severity and MESMTF factors
+    if (expertData?.malaria_probability > 80 || expertData?.typhoid_probability > 80) {
+      return 'critical';
+    }
+    if (expertData?.requires_chest_xray) {
+      return 'high';
+    }
     switch (severity) {
       case 'severe': return 'high';
       case 'moderate': return 'medium';
@@ -1640,22 +1435,15 @@ const NurseDashboard = () => {
     }
   };
 
-<<<<<<< HEAD
-  // Quick actions for nurse workflow
-=======
-  const generateTempPassword = () => {
-    return 'TempPass123!';
+  const getDiseaseColor = (condition) => {
+    if (!condition) return 'gray';
+    const lowerCondition = condition.toLowerCase();
+    if (lowerCondition.includes('malaria')) return 'red';
+    if (lowerCondition.includes('typhoid')) return 'orange';
+    if (lowerCondition.includes('co-infection')) return 'purple';
+    return 'blue';
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setNewPatient(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
   const quickActions = [
     {
       icon: ClipboardDocumentListIcon,
@@ -1666,24 +1454,24 @@ const NurseDashboard = () => {
     },
     {
       icon: DocumentTextIcon,
-      label: 'Patient Notes',
-      description: 'Add clinical notes',
+      label: 'Patient Care',
+      description: 'Clinical notes & assessments',
       color: 'blue',
       href: '/patient-care'
     },
     {
-      icon: CalendarIcon,
-      label: 'Schedule',
-      description: 'View daily schedule',
+      icon: HeartIcon,
+      label: 'Medication',
+      description: 'Administer medications',
       color: 'purple',
-      href: '/schedule'
+      href: '/medication'
     },
     {
-      icon: BellIcon,
-      label: 'Alerts',
-      description: 'Manage notifications',
+      icon: ChartBarIcon,
+      label: 'Medical Records',
+      description: 'View patient records',
       color: 'orange',
-      href: '/alerts'
+      href: '/medical-records'
     }
   ];
 
@@ -1710,32 +1498,11 @@ const NurseDashboard = () => {
                 {user?.medical_staff?.departments?.department_name || 'General Ward'}
               </span>
               <span className="text-sm text-gray-500">
-                {todaysAssignments.length} patients assigned today
+                {todaysAssignments.length} patients under your care
               </span>
             </div>
           </div>
-<<<<<<< HEAD
-=======
-          <div className="flex space-x-3">
-            <button
-              onClick={() => {
-                setShowAssignPatientModal(true);
-                fetchAvailablePatients();
-              }}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition duration-200"
-            >
-              <UserPlusIcon className="h-5 w-5" />
-              <span>Assign Patient</span>
-            </button>
-            <button
-              onClick={() => setShowPatientForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition duration-200"
-            >
-              <UserPlusIcon className="h-5 w-5" />
-              <span>Add New Patient</span>
-            </button>
-          </div>
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
+          {/* Removed assignment buttons since nurses can't assign themselves */}
         </div>
       </div>
 
@@ -1764,6 +1531,28 @@ const NurseDashboard = () => {
         </div>
       )}
 
+      {/* MESMTF Statistics Banner */}
+      <div className="mb-6 bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg border border-blue-200">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-600">{malariaTyphoidStats.malariaCases}</div>
+            <div className="text-sm text-gray-600">Malaria Cases</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-orange-600">{malariaTyphoidStats.typhoidCases}</div>
+            <div className="text-sm text-gray-600">Typhoid Cases</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-purple-600">{malariaTyphoidStats.coInfections}</div>
+            <div className="text-sm text-gray-600">Co-infections</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">{malariaTyphoidStats.chestXraysRequired}</div>
+            <div className="text-sm text-gray-600">Chest X-rays Required</div>
+          </div>
+        </div>
+      </div>
+
       {/* Priority Alerts Banner */}
       {priorityAlerts.filter(alert => alert.isCritical).length > 0 && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
@@ -1775,9 +1564,6 @@ const NurseDashboard = () => {
                 {priorityAlerts.filter(alert => alert.isCritical).length}
               </span>
             </div>
-            <button className="text-red-700 hover:text-red-900 font-medium">
-              View All
-            </button>
           </div>
         </div>
       )}
@@ -1788,38 +1574,72 @@ const NurseDashboard = () => {
         <div className="lg:col-span-2">
           <div className="bg-white shadow rounded-lg">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Today's Patient Assignments</h2>
-              <p className="text-gray-600">Patients under your care for today</p>
+              <h2 className="text-xl font-semibold text-gray-900">Patients Under Your Care</h2>
+              <p className="text-gray-600">Patients assigned to you for care</p>
             </div>
             <div className="p-6">
               <div className="space-y-4">
                 {todaysAssignments.map(patient => (
                   <div key={patient.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition duration-200">
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-4 flex-1">
                       <div className={`w-3 h-3 rounded-full ${
-                        patient.priority === 'high' ? 'bg-red-500' :
+                        patient.priority === 'critical' ? 'bg-red-500' :
+                        patient.priority === 'high' ? 'bg-orange-500' :
                         patient.priority === 'medium' ? 'bg-yellow-500' :
                         'bg-green-500'
                       }`}></div>
-                      <div>
-                        <h3 className="font-medium text-gray-900">{patient.name}</h3>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <h3 className="font-medium text-gray-900">{patient.name}</h3>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-${getDiseaseColor(patient.condition)}-100 text-${getDiseaseColor(patient.condition)}-800`}>
+                            {patient.condition}
+                          </span>
+                        </div>
                         <p className="text-sm text-gray-600">
-                          {patient.age} years • {patient.condition} • Priority: {patient.priority}
+                          {patient.age} years • Priority: {patient.priority}
                         </p>
-                        <div className="flex space-x-4 mt-1 text-xs text-gray-500">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-xs text-gray-500">
                           <span>HR: {patient.heartRate} bpm</span>
                           <span>Temp: {patient.temperature}°C</span>
-                          <span>Last vitals: {patient.lastVitals}</span>
+                          <span>BP: {patient.bloodPressure}</span>
+                          <span>O2: {patient.oxygenSaturation}%</span>
                         </div>
+                        {/* MESMTF Expert System Data */}
+                        {(patient.malariaProbability > 0 || patient.typhoidProbability > 0) && (
+                          <div className="flex space-x-2 mt-1">
+                            {patient.malariaProbability > 0 && (
+                              <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">
+                                Malaria: {patient.malariaProbability}%
+                              </span>
+                            )}
+                            {patient.typhoidProbability > 0 && (
+                              <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded">
+                                Typhoid: {patient.typhoidProbability}%
+                              </span>
+                            )}
+                            {patient.requiresChestXray && (
+                              <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">
+                                Chest X-ray Required
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <button className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded text-sm transition duration-200">
-                      View Details
-                    </button>
+                    <a 
+                      href={`/patient-care?patient=${patient.id}`}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition duration-200 whitespace-nowrap"
+                    >
+                      View Care
+                    </a>
                   </div>
                 ))}
                 {todaysAssignments.length === 0 && (
-                  <p className="text-gray-500 text-center py-8">No patient assignments for today</p>
+                  <div className="text-center py-8">
+                    <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                    <p className="text-gray-500">No patients assigned to your care</p>
+                    <p className="text-sm text-gray-400 mt-1">Patients will be assigned to you by nursing administration</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -1840,11 +1660,23 @@ const NurseDashboard = () => {
                   med.status === 'administered' ? 'border-green-200 bg-green-50' :
                   'border-gray-200'
                 }`}>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium text-gray-900">{med.patient}</h4>
-                      <p className="text-sm text-gray-600">{med.medication} • {med.dosage}</p>
-                      <p className="text-xs text-gray-500">{med.instructions}</p>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <h4 className="font-medium text-gray-900">{med.patient}</h4>
+                        {med.isMalariaTreatment && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-red-100 text-red-800">
+                            Malaria
+                          </span>
+                        )}
+                        {med.isTyphoidTreatment && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-orange-100 text-orange-800">
+                            Typhoid
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">{med.medication}</p>
+                      <p className="text-xs text-gray-500">{med.dosage} • {med.instructions}</p>
                     </div>
                     <span className={`text-xs px-2 py-1 rounded ${
                       med.isOverdue ? 'bg-red-100 text-red-800' :
@@ -1857,13 +1689,13 @@ const NurseDashboard = () => {
                   {med.status === 'scheduled' && !med.isOverdue && (
                     <button
                       onClick={() => markMedicationAdministered(med.id)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white w-full mt-2 text-sm py-1 rounded transition duration-200"
+                      className="bg-blue-600 hover:bg-blue-700 text-white w-full text-sm py-1 rounded transition duration-200"
                     >
                       Mark Administered
                     </button>
                   )}
                   {med.isOverdue && (
-                    <div className="flex justify-between items-center mt-2">
+                    <div className="flex justify-between items-center">
                       <span className="text-red-600 text-sm font-medium">OVERDUE</span>
                       <button
                         onClick={() => markMedicationAdministered(med.id)}
@@ -1876,7 +1708,10 @@ const NurseDashboard = () => {
                 </div>
               ))}
               {medicationSchedule.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No medications scheduled for today</p>
+                <div className="text-center py-4">
+                  <ClipboardDocumentListIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <p className="text-gray-500">No medications scheduled for today</p>
+                </div>
               )}
             </div>
           </div>
@@ -1889,38 +1724,52 @@ const NurseDashboard = () => {
         <div className="bg-white shadow rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">Priority Alerts</h2>
-            <p className="text-gray-600">Critical notifications requiring attention</p>
+            <p className="text-gray-600">Notifications requiring attention</p>
           </div>
           <div className="p-6">
             <div className="space-y-4">
               {priorityAlerts.map(alert => (
                 <div key={alert.id} className={`p-4 border rounded-lg ${
-                  alert.isCritical ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50'
+                  alert.isCritical ? 'border-red-200 bg-red-50' : 
+                  alert.isMESMTFRelated ? 'border-orange-200 bg-orange-50' : 
+                  'border-yellow-200 bg-yellow-50'
                 }`}>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium text-gray-900">{alert.patient}</h4>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <h4 className="font-medium text-gray-900">{alert.patient}</h4>
+                        {alert.isMESMTFRelated && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-purple-100 text-purple-800">
+                            MESMTF
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-700">{alert.message}</p>
                       <p className="text-xs text-gray-600 mt-1">
                         {alert.timestamp.toLocaleDateString()} at {alert.timestamp.toLocaleTimeString()}
                       </p>
                     </div>
                     <span className={`text-xs px-2 py-1 rounded ${
-                      alert.isCritical ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                      alert.isCritical ? 'bg-red-100 text-red-800' : 
+                      alert.isMESMTFRelated ? 'bg-orange-100 text-orange-800' : 
+                      'bg-yellow-100 text-yellow-800'
                     }`}>
                       {alert.severity}
                     </span>
                   </div>
                   <button
                     onClick={() => resolveAlert(alert.id)}
-                    className="bg-gray-600 hover:bg-gray-700 text-white w-full mt-3 text-sm py-1 rounded transition duration-200"
+                    className="bg-gray-600 hover:bg-gray-700 text-white w-full text-sm py-1 rounded transition duration-200"
                   >
                     Mark Resolved
                   </button>
                 </div>
               ))}
               {priorityAlerts.length === 0 && (
-                <p className="text-gray-500 text-center py-4">No priority alerts</p>
+                <div className="text-center py-4">
+                  <BellIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                  <p className="text-gray-500">No priority alerts</p>
+                </div>
               )}
             </div>
           </div>
@@ -1959,191 +1808,6 @@ const NurseDashboard = () => {
           </div>
         </div>
       </div>
-<<<<<<< HEAD
-=======
-
-      {/* Add New Patient Modal */}
-      {showPatientForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-semibold text-gray-900">Add New Patient</h2>
-              <button
-                onClick={() => setShowPatientForm(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <form onSubmit={addNewPatient} className="p-6">
-              {formError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700">
-                  {formError}
-                </div>
-              )}
-              
-              {formSuccess && (
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-green-700">
-                  {formSuccess}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-                  <input
-                    type="text"
-                    name="first_name"
-                    value={newPatient.first_name}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-                  <input
-                    type="text"
-                    name="last_name"
-                    value={newPatient.last_name}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={newPatient.email}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-                  <input
-                    type="tel"
-                    name="phone_number"
-                    value={newPatient.phone_number}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
-                  <input
-                    type="date"
-                    name="date_of_birth"
-                    value={newPatient.date_of_birth}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                
-                {/* Emergency Contact Information */}
-                <div className="md:col-span-2 border-t pt-4 mt-2">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">Emergency Contact</h3>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Name</label>
-                  <input
-                    type="text"
-                    name="emergency_contact_name"
-                    value={newPatient.emergency_contact_name}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Phone</label>
-                  <input
-                    type="tel"
-                    name="emergency_contact_phone"
-                    value={newPatient.emergency_contact_phone}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowPatientForm(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition duration-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition duration-200"
-                >
-                  {isSubmitting ? 'Adding Patient...' : 'Add Patient'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Assign Existing Patient Modal */}
-      {showAssignPatientModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-semibold text-gray-900">Assign Patient to Your Care</h2>
-              <button onClick={() => setShowAssignPatientModal(false)} className="text-gray-400 hover:text-gray-600">
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <div className="p-6">
-              <select
-                value={selectedPatientToAssign}
-                onChange={(e) => setSelectedPatientToAssign(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-              >
-                <option value="">Select a patient</option>
-                {availablePatients.map(patient => (
-                  <option key={patient.id} value={patient.id}>
-                    {patient.users.first_name} {patient.users.last_name}
-                  </option>
-                ))}
-              </select>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowAssignPatientModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    if (selectedPatientToAssign) {
-                      assignPatientToNurse(selectedPatientToAssign);
-                      setShowAssignPatientModal(false);
-                      setSelectedPatientToAssign('');
-                    }
-                  }}
-                  disabled={!selectedPatientToAssign}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-                >
-                  Assign Patient
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
->>>>>>> 656834c5b44347861dd5e27a54d07005ffb1ee8b
     </DashboardLayout>
   );
 };
