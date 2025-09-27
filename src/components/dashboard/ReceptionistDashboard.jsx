@@ -1,6 +1,6 @@
 // src/components/dashboard/ReceptionistDashboard.jsx
 import React, { useState, useEffect } from 'react';
-import DashboardLayout from '../../components/layout/DashboardLayout';
+import DashboardLayout from '../layout/DashboardLayout';
 import { 
   UserGroupIcon,
   CalendarIcon,
@@ -11,19 +11,17 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
 
 const ReceptionistDashboard = () => {
   const [user, setUser] = useState({
-    name: 'Receptionist Lisa Brown',
-    email: 'reception@demo.com',
+    name: 'Receptionist',
+    email: '',
     role: 'receptionist',
     department: 'Front Desk'
   });
   const [stats, setStats] = useState({
     todaysAppointments: 0,
     waitingPatients: 0,
-    callsToday: 0,
     newRegistrations: 0
   });
   const [todaysAppointments, setTodaysAppointments] = useState([]);
@@ -35,10 +33,8 @@ const ReceptionistDashboard = () => {
     { name: 'Dashboard', href: '/reception-dashboard', icon: UserGroupIcon, current: true },
     { name: 'Appointments', href: '/receptionist/receptionist-appointments', icon: CalendarIcon, current: false },
     { name: 'Patient Registration', href: '/receptionist/patient-registration', icon: PlusIcon, current: false },
-    { name: 'Scheduling', href: '/receptionist/scheduling', icon: ClockIcon, current: false },
+    // { name: 'Scheduling', href: '/receptionist/scheduling', icon: ClockIcon, current: false },
     { name: 'Medical Records', href: '/reception/medical-records1', icon: ClockIcon, current: false },
-
-
   ];
 
   useEffect(() => {
@@ -61,6 +57,7 @@ const ReceptionistDashboard = () => {
           .select(`
             first_name,
             last_name,
+            email,
             roles:role_id(role_name)
           `)
           .eq('id', authUser.id)
@@ -69,7 +66,7 @@ const ReceptionistDashboard = () => {
         if (!userError && userData) {
           setUser({
             name: `${userData.first_name} ${userData.last_name}`,
-            email: authUser.email,
+            email: userData.email || authUser.email,
             role: userData.roles?.role_name || 'receptionist',
             department: 'Front Desk'
           });
@@ -103,11 +100,12 @@ const ReceptionistDashboard = () => {
       if (appointmentsError) throw appointmentsError;
 
       // Get waiting patients (appointments with pending status for today)
+      const pendingStatusId = await getStatusId('pending');
       const { count: waitingCount, error: waitingError } = await supabase
         .from('appointments')
         .select('*', { count: 'exact', head: true })
         .eq('appointment_date', today)
-        .eq('status_id', (await getStatusId('pending')));
+        .eq('status_id', pendingStatusId);
 
       if (waitingError) throw waitingError;
 
@@ -123,13 +121,12 @@ const ReceptionistDashboard = () => {
       setStats({
         todaysAppointments: appointmentsCount || 0,
         waitingPatients: waitingCount || 0,
-        callsToday: 0, // This would come from a separate calls table
         newRegistrations: registrationsCount || 0
       });
 
     } catch (error) {
       console.error('Error fetching stats:', error);
-      throw error;
+      // Don't throw error here to prevent breaking the entire dashboard
     }
   };
 
@@ -144,13 +141,13 @@ const ReceptionistDashboard = () => {
           appointment_time,
           reason,
           patients:patient_id(
-            users:id(
+            users:users(
               first_name,
               last_name
             )
           ),
           doctors:doctor_id(
-            users:id(
+            users:users(
               first_name,
               last_name
             )
@@ -162,7 +159,7 @@ const ReceptionistDashboard = () => {
         `)
         .eq('appointment_date', today)
         .order('appointment_time', { ascending: true })
-        .limit(5);
+        .limit(10); // Increased limit to show more appointments
 
       if (error) throw error;
 
@@ -172,14 +169,15 @@ const ReceptionistDashboard = () => {
         doctor: `Dr. ${apt.doctors?.users?.first_name || ''} ${apt.doctors?.users?.last_name || ''}`.trim() || 'Unknown Doctor',
         time: formatTime(apt.appointment_time),
         status: apt.appointment_statuses?.status_name || 'Pending',
-        statusCode: apt.appointment_statuses?.status_code || 'pending'
+        statusCode: apt.appointment_statuses?.status_code || 'pending',
+        reason: apt.reason || 'Consultation'
       }));
 
       setTodaysAppointments(formattedAppointments);
 
     } catch (error) {
       console.error('Error fetching appointments:', error);
-      throw error;
+      // Don't throw error here to prevent breaking the entire dashboard
     }
   };
 
@@ -196,7 +194,7 @@ const ReceptionistDashboard = () => {
           reason,
           created_at,
           patients:patient_id(
-            users:id(
+            users:users(
               first_name,
               last_name
             )
@@ -227,7 +225,7 @@ const ReceptionistDashboard = () => {
 
     } catch (error) {
       console.error('Error fetching waiting patients:', error);
-      throw error;
+      // Don't throw error here to prevent breaking the entire dashboard
     }
   };
 
@@ -280,7 +278,7 @@ const ReceptionistDashboard = () => {
       // Refresh the data
       await fetchDashboardData();
       
-      // Show success message (you could add a toast notification here)
+      // Show success message
       console.log('Patient checked in successfully');
 
     } catch (error) {
@@ -322,8 +320,8 @@ const ReceptionistDashboard = () => {
 
   return (
     <DashboardLayout user={user} navigation={navigation}>
-      {/* Error Display */}
-      {error && (
+      {/* Error Display - Only show if there's an actual error that persists */}
+      {error && !loading && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center">
           <ExclamationTriangleIcon className="h-5 w-5 text-red-400 mr-2" />
           <span className="text-red-800">{error}</span>
@@ -349,8 +347,8 @@ const ReceptionistDashboard = () => {
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      {/* Quick Stats - Removed Calls Today */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition duration-200">
           <div className="p-5">
             <div className="flex items-center">
@@ -387,22 +385,6 @@ const ReceptionistDashboard = () => {
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <PhoneIcon className="h-6 w-6 text-orange-600" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Calls Today</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats.callsToday}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition duration-200">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
                 <PlusIcon className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-5 w-0 flex-1">
@@ -416,13 +398,13 @@ const ReceptionistDashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Today's Appointments */}
-        <div className="bg-white shadow rounded-lg">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Today's Appointments - Bigger card showing more appointments */}
+        <div className="bg-white shadow rounded-lg lg:col-span-2">
           <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <h3 className="text-lg font-medium text-gray-900">Today's Appointments</h3>
             <span className="text-sm text-gray-500">
-              {todaysAppointments.length} of {stats.todaysAppointments}
+              {todaysAppointments.length} appointments today
             </span>
           </div>
           <div className="p-6">
@@ -432,33 +414,55 @@ const ReceptionistDashboard = () => {
                 <p>No appointments scheduled for today</p>
               </div>
             ) : (
-              todaysAppointments.map(appointment => (
-                <div key={appointment.id} className="flex items-center justify-between py-3 border-b border-gray-200 last:border-0">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{appointment.patient}</p>
-                    <p className="text-sm text-gray-600">{appointment.doctor} • {appointment.time}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      appointment.statusCode === 'confirmed' 
-                        ? 'bg-green-100 text-green-800' 
-                        : appointment.statusCode === 'checked_in'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {appointment.status}
-                    </span>
-                    {appointment.statusCode !== 'checked_in' && (
+              <div className="space-y-4">
+                {todaysAppointments.map(appointment => (
+                  <div key={appointment.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition duration-200">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-medium text-gray-900 text-lg">{appointment.patient}</p>
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                          appointment.statusCode === 'confirmed' 
+                            ? 'bg-green-100 text-green-800' 
+                            : appointment.statusCode === 'checked_in'
+                            ? 'bg-blue-100 text-blue-800'
+                            : appointment.statusCode === 'completed'
+                            ? 'bg-gray-100 text-gray-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {appointment.status}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+                        <div>
+                          <span className="font-medium">Doctor:</span> {appointment.doctor}
+                        </div>
+                        <div>
+                          <span className="font-medium">Time:</span> {appointment.time}
+                        </div>
+                        <div className="col-span-2">
+                          <span className="font-medium">Reason:</span> {appointment.reason}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="ml-4 flex flex-col gap-2">
+                      {appointment.statusCode !== 'checked_in' && appointment.statusCode !== 'completed' && (
+                        <button 
+                          onClick={() => handleCheckIn(appointment.id)}
+                          className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium transition duration-200"
+                        >
+                          Check In
+                        </button>
+                      )}
                       <button 
-                        onClick={() => handleCheckIn(appointment.id)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium mt-1 block"
+                        onClick={() => window.location.href = `/receptionist/appointments?edit=${appointment.id}`}
+                        className="bg-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium transition duration-200"
                       >
-                        Check In
+                        View Details
                       </button>
-                    )}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -478,23 +482,30 @@ const ReceptionistDashboard = () => {
                 <p>No patients currently waiting</p>
               </div>
             ) : (
-              waitingPatients.map(patient => (
-                <div key={patient.id} className="flex items-center justify-between py-3 border-b border-gray-200 last:border-0">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{patient.name}</p>
-                    <p className="text-sm text-gray-600">{patient.purpose} • Checked in: {patient.checkIn}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-orange-600 font-medium">Waiting: {patient.waiting}</p>
+              <div className="space-y-4">
+                {waitingPatients.map(patient => (
+                  <div key={patient.id} className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium text-gray-900">{patient.name}</p>
+                      <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                        Waiting: {patient.waiting}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-3">
+                      <span className="font-medium">Purpose:</span> {patient.purpose}
+                    </p>
+                    <p className="text-sm text-gray-600 mb-3">
+                      <span className="font-medium">Checked in:</span> {patient.checkIn}
+                    </p>
                     <button 
                       onClick={() => handleNotifyDoctor(patient.id)}
-                      className="text-green-600 hover:text-green-800 text-sm font-medium mt-1"
+                      className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 text-sm font-medium transition duration-200"
                     >
                       Notify Doctor
                     </button>
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -502,10 +513,10 @@ const ReceptionistDashboard = () => {
 
       {/* Quick Actions */}
       <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-medium text-blue-900 mb-4">Reception Actions</h3>
+        <h3 className="text-lg font-medium text-blue-900 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button 
-            onClick={() => window.location.href = '/receptionist/register'}
+            onClick={() => window.location.href = '/receptionist/patient-registration'}
             className="bg-white border border-blue-200 text-blue-700 p-4 rounded-lg hover:bg-blue-50 transition duration-200 flex flex-col items-center"
           >
             <PlusIcon className="h-6 w-6 mb-2" />
@@ -519,18 +530,18 @@ const ReceptionistDashboard = () => {
             <span className="text-sm font-medium">Schedule</span>
           </button>
           <button 
-            onClick={() => window.location.href = '/receptionist/appointments'}
+            onClick={() => window.location.href = '/receptionist/receptionist-appointments'}
             className="bg-white border border-purple-200 text-purple-700 p-4 rounded-lg hover:bg-purple-50 transition duration-200 flex flex-col items-center"
           >
-            <PhoneIcon className="h-6 w-6 mb-2" />
-            <span className="text-sm font-medium">Calls</span>
+            <ClockIcon className="h-6 w-6 mb-2" />
+            <span className="text-sm font-medium">Appointments</span>
           </button>
           <button 
-            onClick={() => window.location.href = '/receptionist/appointments'}
+            onClick={() => window.location.href = '/reception/medical-records1'}
             className="bg-white border border-orange-200 text-orange-700 p-4 rounded-lg hover:bg-orange-50 transition duration-200 flex flex-col items-center"
           >
             <CheckCircleIcon className="h-6 w-6 mb-2" />
-            <span className="text-sm font-medium">Check-in</span>
+            <span className="text-sm font-medium">Records</span>
           </button>
         </div>
       </div>
